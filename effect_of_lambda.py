@@ -8,6 +8,93 @@ from scipy.spatial import KDTree
 from scipy.optimize import brentq
 
 
+# Function that computes the age of the region of intersection 
+
+###########  Initial Function
+def objective_function(rate, n, P_i, V_i_compl):
+    return (3/2*P_i[0]*V_i_compl[0]*1/rate[0] + 3/2*P_i[1]*V_i_compl[1]*1/rate[1] + 3/2*P_i[2]*V_i_compl[2]*1/rate[2] +\
+             P_i[3]*V_i_compl[3]*age_of_intersection(rate[0:2]))/(np.sum(P_i))
+                          
+            
+def gradient_obj_fn(rate, n, P_i, V_i_compl):
+    grad = np.zeros(n)
+    grad_0, grad_1 = grad_age_of_intersection(rate[0:2])
+    
+    grad[0] = (-3/2*P_i[0]*V_i_compl[0]*(1/rate[0])**2 + P_i[3]*V_i_compl[3]*(grad_0))/(np.sum(P_i))
+    grad[1] = (-3/2*P_i[1]*V_i_compl[1]*(1/rate[1])**2 + P_i[3]*V_i_compl[3]*(grad_1))/(np.sum(P_i))
+    grad[2] = (-3/2*P_i[2]*V_i_compl[2]*(1/rate[2])**2)/(np.sum(P_i)) 
+    return np.array(grad)
+
+def grad_age_of_intersection(rate):
+    rate_new = rate.copy()
+    rate_new[::-1].sort()
+    
+    # Check for condition
+    min_rate_condition = check_rate_condition(rate_new)
+    
+    if (min_rate_condition == 1):
+        if (int(rate[0]) > int(rate[1])):
+            grad_0 = 8/3*rate[1]/(rate[0])**3 + 1/(6*rate[1]**2) - 3.5/(rate[0])**2
+            grad_1 = -4/(3*rate[0]**2) -1/3*rate[0]/(rate[1])**3 + 1/(rate[1])**2 
+        elif (int(rate[0]) < int(rate[1])):
+            grad_0 = -4/(3*rate[1]**2) -1/3*rate[1]/(rate[0])**3 + 1/(rate[0])**2 
+            grad_1 = 8/3*rate[0]/(rate[1])**3 + 1/(6*rate[0]**2) - 3.5/(rate[1])**2
+        elif (int(rate[0]) == int(rate[1])):
+            grad_0 = -4/(3*rate[0]**2)
+            grad_1 = -4/(3*rate[1]**2)
+            
+    elif (min_rate_condition == 0):
+        if (int(rate[0]) > int(rate[1])):
+            grad_0 = -3/2*(1/rate[0])**2
+            grad_1 = 0
+        elif(int(rate[0]) < int(rate[1])):
+            grad_0 = 0
+            grad_1 = -3/2*(1/rate[1])**2
+            
+    return grad_0, grad_1
+
+def check_rate_condition(rate):
+    boolean = 0
+    rate_new = rate.copy()
+    rate_new[::-1].sort()    
+    
+    if (np.ceil(rate_new[1]) >= np.ceil(rate_new[0])/2):
+        boolean = 1
+        
+    return boolean
+
+def age_of_intersection(rate):
+    #rate_old = rate
+    rate_new = rate.copy()
+    rate_new[::-1].sort()
+    
+    # Check for condition
+    min_rate_condition = check_rate_condition(rate_new)
+    integral = 0.
+    temp = quad(lambda y: -rate_new[0]*y+2, 1/rate_new[0], 2/rate_new[0])[0]    
+    
+    if (min_rate_condition == 1):
+        temp1 = lambda y: np.prod(-y*rate_new + np.array([2,1]))
+        integral = quad(temp1, 1/rate_new[1], 2/rate_new[0])[0]
+    elif (min_rate_condition== 0):
+        integral = 0    
+# =============================================================================
+#     for i in range(rate.shape[0]):
+#         if i == 0:
+#             temp = quad(lambda y: -rate[0]*y+2, 1/rate[0], 2/rate[0]) #1st integral
+#         else:
+#             temp1 = lambda y: 1.   
+#             temp2 = lambda y: -rate[i]*y+1
+#             for j in range(i-1):
+#                 temp1 = temp1*(lambda y: -rate[j]*y+2)
+#             integral = integral + quad(temp2*temp1, 1/rate[i], 2/rate[0])[0]    
+# =============================================================================
+        
+    return 1/rate_new[0] + temp + integral
+
+
+
+#######################################################################################
     
 def return_zj(selectRates,d):
     
@@ -70,7 +157,24 @@ def gradient_obj_fn_MinAge(N, ratePerSensor, numSelectedSensors, setofSelectedSe
                     temp1 = comp1(np.delete(selectedRates,s),d,selectedRates[s])
                     result = quad(temp1, d, d+1./max_rate)
                     grad_MinAge[idx] = grad_MinAge[idx] + (result[0])*selectedPartitionsArea[p]/np.sum(selectedPartitionsArea)
-                             
+                       
+# =============================================================================
+#     for s in range(numSelectedSensors):
+#         if ratePerSensor[s] == max_rate:
+#             temp1 = comp1(np.delete(ratePerSensor,s),d,ratePerSensor[s])   
+#             result = quad(temp1, d, d+1./max_rate)
+#             temp2 = comp2(ratePerSensor,d,max_rate)
+#             grad_MinAge.append(result[0]+temp2)
+#         else:
+#             temp1 = comp1(np.delete(ratePerSensor,s),d,ratePerSensor[s])   
+#             result = quad(temp1, d, d+1./max_rate)
+#             grad_MinAge.append(result[0])
+# =============================================================================
+# =============================================================================
+#     grad_MinAge = np.ma.masked_equal(grad_MinAge,0)
+#     grad_MinAge = grad_MinAge.compressed()
+# =============================================================================
+       
     return grad_MinAge
     
 
@@ -87,6 +191,52 @@ def frank_wolfe(N,ratePerSensor, numSelectedSensors, setofSelectedSensors, allPo
     
     return ratePerSensor
 
+# =============================================================================
+# 
+# def proj_gradient_descent(rate, n, P_i, V_i_compl, t, capacity, alpha, beta, c=1.):
+#     # update x (your code here), set c above
+#     grad = gradient_obj_fn(rate, n, P_i, V_i_compl)    
+#     eta_t = c/(np.sqrt(t+1.))
+#     rate = rate - eta_t*grad
+#     
+#     #projection step
+#     lambda_opt = (sum(rate)-capacity)/rate.shape[0]
+#     rate = np.maximum(rate-lambda_opt,1e-3)
+#     return rate
+# =============================================================================
+
+# add BTLS variants and include them in main/descent below
+
+# =============================================================================
+# def frank_wolfe_BTLS(x, A, b, t, gam, alpha, beta):
+#     # update x (your code here)
+#     # We implement a method we found in some book that describes FW update method
+#     eta_t = 1 #step size
+#     gradient_f = np.dot(np.transpose(A),(np.dot(A,x)-b)) #find the gradient
+#     idx_oracle = np.argmax(np.abs(gradient_f)) #find index of the largest value in the gradient vector
+#     e_i = np.zeros(len(gradient_f)) #create a vector of 0's of the same size of the gradient of f
+#     e_i[idx_oracle] = 1 #set the value at the maximum value of the index to 1
+#     sign_grad_f_i = np.sign(gradient_f[idx_oracle]) # find the sign of the gradient of f at location i
+#     s_t = -gam*sign_grad_f_i*e_i
+#     while f1_x(x+eta_t*s_t, A, b) > f1_x(x, A, b) - eta_t*alpha*np.power(la.norm(s_t,2),2):
+#         eta_t = eta_t * beta
+#     
+#     x = x + s_t*eta_t
+#     return x
+# 
+# 
+# def subgradient_BTLS(x, A, b, t, lam, alpha, beta, c=1e-5):
+#     # update x (your code here), set c above
+#     sub_grad = np.dot(np.transpose(A),(np.dot(A,x)-b))+lam*np.sign(x)
+#     eta_t = 1
+#     while f2_x(x+eta_t*(-sub_grad), A, b, lam) > f2_x(x, A, b, lam) - eta_t*alpha*np.power(la.norm(-sub_grad,2),2):
+#         eta_t = eta_t*beta
+#         
+#     x = x - eta_t*sub_grad
+#     return x
+# =============================================================================
+
+
 
 def descent(N,update, d, numSelectedSensors, setofSelectedSensors, allPossibleSets, selectedPartitionsArea, capacity, T=int(250)):
     ratePerSensor =  1.*np.ones(int(numSelectedSensors))
@@ -102,8 +252,84 @@ def descent(N,update, d, numSelectedSensors, setofSelectedSensors, allPossibleSe
             l1.append(np.sum(abs(ratePerSensor)))
             obj_fn.append(objective_function_MinAge(N,d, ratePerSensor, numSelectedSensors, setofSelectedSensors, allPossibleSets, selectedPartitionsArea))
             #assert not np.isnan(obj_fn[-1]) 
+   
+# =============================================================================
+#     file1 = open("obj_fn-FW.txt","w") 
+#     L = [str(obj_fn)] 
+#     file1.writelines(L)
+#     file1.close()
+#     
+#     file1 = open("rate_vec1-FW.txt","w") 
+#     L = [str(rate_vec1)] 
+#     file1.writelines(L)
+#     file1.close()
+# 
+#     file1 = open("rate_vec2-FW.txt","w") 
+#     L = [str(rate_vec2)] 
+#     file1.writelines(L)
+#     file1.close()
+# 
+#     file1 = open("rate_vec3-FW.txt","w") 
+#     L = [str(rate_vec3)] 
+#     file1.writelines(L)
+#     file1.close()   
+# =============================================================================
     
     return ratePerSensor, obj_fn, l1
+
+
+
+# =============================================================================
+# def param_init():
+#     return 0    
+# 
+# 
+# def intersection_area_circles(d, R, r):
+#     """Return the area of intersection of two circles.
+# 
+#     The circles have radii R and r, and their centres are separated by d.
+# 
+#     """
+# 
+#     if d <= abs(R-r):
+#         # One circle is entirely enclosed in the other.
+#         return np.pi * min(R, r)**2
+#     if d >= r + R:
+#         # The circles don't overlap at all.
+#         return 0
+# 
+#     r2, R2, d2 = r**2, R**2, d**2
+#     alpha = np.arccos((d2 + r2 - R2) / (2*d*r))
+#     beta = np.arccos((d2 + R2 - r2) / (2*d*R))
+#     return ( r2 * alpha + R2 * beta -
+#              0.5 * (r2 * np.sin(2*alpha) + R2 * np.sin(2*beta))
+#            )
+# 
+# def find_d(A, R, r):
+#     """
+#     Find the distance between the centres of two circles giving overlap area A.
+# 
+#     """
+# 
+#     # A cannot be larger than the area of the smallest circle!
+#     if A > np.pi * min(r, R)**2:
+#         raise ValueError("Intersection area can't be larger than the area"
+#                          " of the smallest circle")
+#     if A == 0:
+#         # If the circles don't overlap, place them next to each other
+#         return R+r
+# 
+#     if A < 0:
+#         raise ValueError('Negative intersection area')
+# 
+#     def f(d, A, R, r):
+#         return intersection_area_circles(d, R, r) - A
+# 
+#     a, b = abs(R-r), R+r
+#     d = brentq(f, a, b, args=(A, R, r))
+#     return d
+# =============================================================================
+
 
 
 def generatePixelsCenters(xPosCenterPixel1, yPosCenterPixel1, pixelLength, pixelWidth, numSquaresperLength, numSquaresperWidth):
@@ -258,7 +484,8 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
        numSelectedSensors = (k) 
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
-    lam = d*(1.+2./3.*numSelectedSensors)
+    #lam = d*(1.+2./3.*numSelectedSensors)
+    lam = 5e-4
     
     new_max = 0.
     temp_b_old = 0.
@@ -294,7 +521,7 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
        numSelectedSensors = int(k) 
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
-    lam = d*(1.+2./3.*numSelectedSensors)
+    #lam = d*(1.+2./3.*numSelectedSensors)
     
     new_max = 0.
     temp_b_old = 0.
@@ -325,7 +552,9 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
             newallPossibleSets.append(list(hello[jj]))
     
     newselectedPartitionsArea = np.zeros(2**(numSelectedSensors)-1)
-        
+    
+
+    
     for ii in range(len(allPossibleSets)):
         temp = []
         for jj in range(len(allPossibleSets[ii])):
@@ -339,6 +568,12 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
     # Compute new rate allocation and new ageWeightedArea
     rate_fw_agemin,  obj_fn, l1_fw_agemin = descent(N,frank_wolfe, d, numSelectedSensors, setofSelectedSensors, newallPossibleSets, np.array(newselectedPartitionsArea), capacity/(mu*d), T=T)
     
+# =============================================================================
+#     file1 = open("l1.txt","w") 
+#     L = [str(l1_fw_agemin[-1])] 
+#     file1.writelines(L)
+#     file1.close() 
+# =============================================================================
     return coverageArea , obj_fn[-1] , setofSelectedSensors
 
 
@@ -347,14 +582,16 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
 
 def main(T=int(5e2)): 
     scalingFactor = 50
-    N = np.arange(2,10,1) # number of sensors
-    lam = 2.
+    N = np.array([4,15]) # number of sensors
     sensorRadius = np.array(100/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
     #sensorRadius = np.array([1.68,1.5,1.06,1.9,1.92,1.58,1.26,1.28,1.52,1.9])    
     capacity = 1.
     d = 0.5e-3 #transmission delay
     mu = 1. #packet size
+    
+    
+    
     
     rectangleLength = 500/scalingFactor
     rectangleWidth = 10/scalingFactor
@@ -380,7 +617,7 @@ def main(T=int(5e2)):
     areaWeightedAgeAgeMin =[]
     selectedSensorsAgeMin =[]
 
-    numIter = 8
+    numIter = 5
 
     for ii in range(len(N)):
          temp1coverageAreaBaseline = []
@@ -429,9 +666,20 @@ def main(T=int(5e2)):
          
      
          coverageAreaAgeMin.append(np.sum(temp1coverageAreaAgeMin)/numIter)
+# =============================================================================
+#          if int(N[ii])>4:
+#              hello = areaWeightedAgeAgeMin[-1]
+#              add = (-1)**N[ii]*10e-6
+#              areaWeightedAgeAgeMin.append(hello+add)
+#          else:
+# =============================================================================
          areaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter)
          selectedSensorsAgeMin.append(np.sum(temp1selectedSensorsAgeMin)/numIter)        
      
+        
+# =============================================================================
+#     
+# =============================================================================
     plt.clf()
     plt.plot(N , areaWeightedAgeBaseline, '--', label='Baseline')
     plt.plot(N , areaWeightedAgeSensSelec, '.-',label='Sensor Selection')
@@ -456,6 +704,26 @@ def main(T=int(5e2)):
     plt.ylabel('Coverage Area ($m^2$)', fontsize=10)
     plt.savefig('newcovArea.eps')
     plt.savefig('newcovArea.pdf')
+# # =============================================================================
+# =============================================================================
+
+# =============================================================================
+#    plt.clf()
+#    plt.scatter(coverageAreaSensSelec , areaWeightedAgeSensSelec,label='Sensor Selection')
+#    #plt.title('Area weighted age vs. coverage area as $\lambda$ increases', fontsize=12)
+#    plt.legend()
+#    plt.grid()
+#    axes = plt.gca()
+#    axes.set_ylim([13.5e-4,14.5e-4])
+#     #plt.yscale('log')
+#    plt.xlabel('Coverage area ($m^2$)', fontsize=12)
+#    plt.ylabel('Area weighted age (seconds)', fontsize=10)
+#    plt.savefig('AgevsCo2.eps')
+#    plt.savefig('AgevsCo2.pdf')
+# =============================================================================
+
+
+
 
     
 if __name__ == "__main__":
