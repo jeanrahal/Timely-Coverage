@@ -231,12 +231,9 @@ def compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors ,rate
 def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam, numSelectedSensors, thresh = 2.):
     areaWeightedAge = 0.
     coverageArea = np.sum(partitionsArea)
-    numSelectedSensors = N
     setofSelectedSensors = []
     setofSensors = np.arange(1,N+1,1)
-    
-    
-    
+      
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
     lam = d*(1.+2./3.*numSelectedSensors)
     
@@ -266,6 +263,7 @@ def main(T=int(5e2)):
     N = 8 # number of sensors
     k = 4 # number of selected sensors
     
+    numSelectedSensors = N
     if int(N)>int(k):
        numSelectedSensors = int(k) 
     
@@ -274,13 +272,14 @@ def main(T=int(5e2)):
     d = 0.5e-3 #transmission delay
     mu = 1. #packet size
     
-    lam_min = d*(1.+2./3.*numSelectedSensors)
+    #lam_min = d*(1.+2./3.*numSelectedSensors)
     #lam = np.arange(lam_min,2.*lam_min,0.00005)
-    lam = np.arange(0.01,3.,0.05)
+    lam = np.arange(2.,6.,0.05)
     
     rectangleLength = 1000/scalingFactor
     rectangleWidth = 10/scalingFactor
-    #areaR = rectangleLength*rectangleWidth
+    areaR = rectangleLength*rectangleWidth*scalingFactor**2
+
     numSquaresperLength = int(rectangleLength*10)
     numSquaresperWidth = int(rectangleWidth*10)
     
@@ -318,7 +317,7 @@ def main(T=int(5e2)):
              temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
      
           
-         coverageAreaSensSelec.append(np.sum(temp1coverageAreaSensSelec)/numIter)
+         coverageAreaSensSelec.append(np.sum(temp1coverageAreaSensSelec)/numIter/areaR)
          areaWeightedAgeSensSelec.append(np.sum(temp1areaWeightedAgeSensSelec)/numIter)
          selectedSensorsSensSelec.append(np.sum(temp1selectedSensorsSensSelec)/numIter)
     
@@ -329,10 +328,10 @@ def main(T=int(5e2)):
     plt.grid()
     plt.ylim(min(areaWeightedAgeSensSelec), max(areaWeightedAgeSensSelec))
     #plt.yscale('log')
-    plt.xlabel('Coverage area ($m^2$)', fontsize=12)
+    plt.xlabel('Density of coverage area ($m^2$)', fontsize=12)
     plt.ylabel('Normalized area weighted age (seconds)', fontsize=5)
-    plt.savefig('AgevsCo1.eps')
-    plt.savefig('AgevsCo1.pdf')
+    plt.savefig('AgevsCo2.eps')
+    plt.savefig('AgevsCo2.pdf')
 
 
 

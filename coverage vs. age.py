@@ -233,8 +233,9 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
     coverageArea = np.sum(partitionsArea)
     setofSelectedSensors = []
     setofSensors = np.arange(1,N+1,1)
-        
+      
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    lam = d*(1.+2./3.*numSelectedSensors)
     
     new_max = 0.
     temp_b_old = 0.
@@ -259,119 +260,78 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
 
 def main(T=int(5e2)): 
     scalingFactor = 50
-    N = np.array([4,10]) # number of sensors
-    k = 4 # number of selected sensors
+    N = 14 # number of sensors
     
+    sensorRadius = 100/scalingFactor #coverage radius per sensor
+    capacity = 1.
+    d = 0.5e-3 #transmission delay
+    mu = 1. #packet size
+    
+    #lam_min = d*(1.+2./3.*numSelectedSensors)
+    #lam = np.arange(lam_min,2.*lam_min,0.00005)
+    #lam = np.arange(2.,6.,0.05)
+    lam = 1.
+    
+    rectangleLength = 1000/scalingFactor
+    rectangleWidth = 10/scalingFactor
+    areaR = rectangleLength*rectangleWidth*scalingFactor**2
+    
+    numSquaresperLength = int(rectangleLength*10)
+    numSquaresperWidth = int(rectangleWidth*10)
+    
+    pixelLength = rectangleLength/numSquaresperLength
+    pixelWidth = rectangleWidth/numSquaresperWidth
+    
+    xPosCenterPixel1 = pixelLength/2
+    yPosCenterPixel1 = pixelWidth/2
+    
+    coordPixels = generatePixelsCenters(xPosCenterPixel1, yPosCenterPixel1, pixelLength, pixelWidth, numSquaresperLength, numSquaresperWidth)
+
+
     coverageAreaSensSelec = []
     areaWeightedAgeSensSelec = []
-    selectedSensorsSensSelec = []    
+    selectedSensorsSensSelec = []
+
+    numIter = 30
+
+    k = np.arange(1,N,1)
     
-    for kk in range(len(N)):    
-        numSelectedSensors = N[kk]
-        if int(N[kk])>int(k):
-           numSelectedSensors = int(k) 
+    for ii in range(len(k)):
+        numSelectedSensors = k[ii]
         
-        sensorRadius = 100/scalingFactor #coverage radius per sensor
-        capacity = 1.
-        d = 0.5e-3 #transmission delay
-        mu = 1. #packet size
-        
-        lam_min = d*(1.+1./2.*numSelectedSensors)
-        lam_max = d*(1.+2./3.*numSelectedSensors)
-        lam = np.arange(lam_min, lam_max,0.00001)
-        #lam = np.arange(0.01,3.,0.05)
-        
-        rectangleLength = 500/scalingFactor
-        rectangleWidth = 10/scalingFactor
-        #areaR = rectangleLength*rectangleWidth
-        numSquaresperLength = int(rectangleLength*10)
-        numSquaresperWidth = int(rectangleWidth*10)
-        
-        pixelLength = rectangleLength/numSquaresperLength
-        pixelWidth = rectangleWidth/numSquaresperWidth
-        
-        xPosCenterPixel1 = pixelLength/2
-        yPosCenterPixel1 = pixelWidth/2
-        
-        coordPixels = generatePixelsCenters(xPosCenterPixel1, yPosCenterPixel1, pixelLength, pixelWidth, numSquaresperLength, numSquaresperWidth)
-        
-        
-        coverageAreaSensSelec.append([])
-        areaWeightedAgeSensSelec.append([])
-        selectedSensorsSensSelec.append([])        
- 
-        
-        numIter = 500
-        
-        for ii in range(len(lam)):         
-            temp1coverageAreaSensSelec = []
-            temp1areaWeightedAgeSensSelec = []
-            temp1selectedSensorsSensSelec = []
-             
-            for jj in range(numIter):
-                 xcoordSensors = 0 + np.random.rand(N[kk],1)*(rectangleLength-0) 
-                 ycoordSensors = 0 + np.random.rand(N[kk],1)*(rectangleWidth-0)
-                 coordSensors = np.concatenate((xcoordSensors,ycoordSensors),axis=1)
-                 
-                 partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, N[kk])
-        
-                 tempcoverageAreaSensSelec, tempareaWeightedAgeSensSelec, tempselectedSensorsSensSelec = SensSelecModel(N[kk], d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor, sensorRadius*scalingFactor, scalingFactor, lam[ii], numSelectedSensors, thresh = 2.)
-                 
-                 temp1coverageAreaSensSelec.append(tempcoverageAreaSensSelec)
-                 temp1areaWeightedAgeSensSelec.append(tempareaWeightedAgeSensSelec)
-                 temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
+        temp1coverageAreaSensSelec = []
+        temp1areaWeightedAgeSensSelec = []
+        temp1selectedSensorsSensSelec = []
          
-              
-            coverageAreaSensSelec[kk].append(np.sum(temp1coverageAreaSensSelec)/numIter)
-            areaWeightedAgeSensSelec[kk].append(np.sum(temp1areaWeightedAgeSensSelec)/numIter)
-            selectedSensorsSensSelec[kk].append(np.sum(temp1selectedSensorsSensSelec)/numIter)
+        for jj in range(numIter):
+             xcoordSensors = 0 + np.random.rand(N,1)*(rectangleLength-0) 
+             ycoordSensors = 0 + np.random.rand(N,1)*(rectangleWidth-0)
+             coordSensors = np.concatenate((xcoordSensors,ycoordSensors),axis=1)
+             
+             partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,N)
+
+             tempcoverageAreaSensSelec , tempareaWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N, d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor, sensorRadius*scalingFactor, scalingFactor, lam, numSelectedSensors, thresh = 2.)
+             
+             temp1coverageAreaSensSelec.append(tempcoverageAreaSensSelec)
+             temp1areaWeightedAgeSensSelec.append(tempareaWeightedAgeSensSelec)
+             temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
+     
+          
+        coverageAreaSensSelec.append(np.sum(temp1coverageAreaSensSelec)/numIter/areaR)
+        areaWeightedAgeSensSelec.append(np.sum(temp1areaWeightedAgeSensSelec)/numIter)
+        selectedSensorsSensSelec.append(np.sum(temp1selectedSensorsSensSelec)/numIter)
     
     
     plt.clf()
-    plt.scatter(lam,coverageAreaSensSelec[0], label='N=4')
+    plt.scatter(coverageAreaSensSelec, areaWeightedAgeSensSelec, label='Sensor Selection')
     plt.legend()
     plt.grid()
-    plt.xlim(lam_min, lam_max)
-    plt.xlabel('$\lambda$', fontsize=12)
-    plt.ylabel('Coverage area ($m^2$)', fontsize=5)
-    plt.savefig('covarea_vs_lambda_N=4.eps')
-    plt.savefig('covarea_vs_lambda_N=4.pdf')
-    
-    
-    plt.clf()
-    plt.scatter(lam,areaWeightedAgeSensSelec[0], label='N=4')
-    plt.legend()
-    plt.grid()
-    plt.xlim(lam_min, lam_max)
-    plt.ylim(min(areaWeightedAgeSensSelec[0]), max(areaWeightedAgeSensSelec[0]))
-    plt.xlabel('$\lambda$', fontsize=12)
+    plt.ylim(min(areaWeightedAgeSensSelec), max(areaWeightedAgeSensSelec))
+    #plt.yscale('log')
+    plt.xlabel('Density of coverage area ($m^2$)', fontsize=12)
     plt.ylabel('Normalized area weighted age (seconds)', fontsize=5)
-    plt.savefig('age_vs_lambda_N=4.eps')
-    plt.savefig('age_vs_lambda_N=4.pdf')    
-
-
-    plt.clf()
-    plt.scatter(lam,coverageAreaSensSelec[1], label='N=10')
-    plt.legend()
-    plt.grid()
-    plt.xlim(lam_min, lam_max)
-    plt.xlabel('$\lambda$', fontsize=12)
-    plt.ylabel('Coverage area ($m^2$)', fontsize=5)
-    plt.savefig('covarea_vs_lambda_N=10.eps')
-    plt.savefig('covarea_vs_lambda_N=10.pdf')
-    
-    
-    plt.clf()
-    plt.scatter(lam,areaWeightedAgeSensSelec[1], label='N=10')
-    plt.legend()
-    plt.grid()
-    plt.xlim(lam_min, lam_max)
-    plt.ylim(min(areaWeightedAgeSensSelec[1]), max(areaWeightedAgeSensSelec[1]))
-    plt.xlabel('$\lambda$', fontsize=12)
-    plt.ylabel('Normalized area weighted age (seconds)', fontsize=5)
-    plt.savefig('age_vs_lambda_N=10.eps')
-    plt.savefig('age_vs_lambda_N=10.pdf')    
-
+    plt.savefig('AgevsCo3.eps')
+    plt.savefig('AgevsCo3.pdf')
 
 
 
