@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import time 
 import copy
 import itertools 
 from scipy.integrate import quad
@@ -149,15 +150,13 @@ def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensor
     temp = np.zeros(2**N-1)
     temp1 = []
     allPossibleSets = []
-    
+
     for ii in range(1,N+1):
         hello = findsubsets(np.arange(1,N+1,1),ii) 
         #hello1 = (np.asarray(hello))
         for jj in range(len(hello)):
             allPossibleSets.append(list(hello[jj]))
-        
-    
-    
+          
     for pixel in range(len(coordPixels)):
         for sensor in range(N):
             if pixelisInCircle(sensor,sensorRadius,pixel,coordPixels,coordSensors) == 1:
@@ -177,22 +176,125 @@ def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensor
         tempPartitionsPixels = np.zeros(2**N-1)
         temp = np.zeros(2**N-1)
         temp1 = []
-        
+ 
     return partitionsPixels*pixelLength*pixelWidth, allPossibleSets
 
 
-
-def  baselineModel(ratePerSensor , d, partitionsArea , allPossibleSets, scalingFactor):
-    areaWeightedAge = 0.
-    coverageArea = np.sum(partitionsArea)
-    AgePerPartition = []
-    for ii in range(len(partitionsArea)):
-        n = len(allPossibleSets[ii])
-        tempAge = d + (1./(n+1.))*(1/ratePerSensor) 
-        #tempAge = (n+2.)/(n+1.)*(1/ratePerSensor)
-        AgePerPartition.append(tempAge)
+def sampleIsinBounds(coordSample,coordBox):
+    isInBox = 0
     
-    areaWeightedAge = np.sum(partitionsArea*AgePerPartition)/coverageArea
+    if (coordSample[0][0] >= coordBox[0] and coordSample[0][0] <= coordBox[1] and coordSample[0][1] >= coordBox[2] and coordSample[0][1] <= coordBox[3]) :
+        isInBox = 1
+    
+    return isInBox
+
+
+
+def SamplesPerSensor(coordSensor,sensorRadius,coordBox,num_samples_per_sensor):
+    coordSamplesPerSensor = []
+    count = 0
+    
+    while 1:
+        if len(coordSamplesPerSensor) == num_samples_per_sensor:
+            break 
+        else:                
+            theta = 2*np.pi*np.random.rand(1,1)
+            r = sensorRadius*np.sqrt(np.random.rand(1,1))
+            x, y = r * np.cos(theta) + coordSensor[0]*np.ones([1,1]), r * np.sin(theta) + coordSensor[1]*np.ones([1,1])
+            temp = np.concatenate((x,y),axis=1)
+            if sampleIsinBounds(temp,coordBox) == 1:
+                coordSamplesPerSensor.append([])
+                coordSamplesPerSensor[count].append(temp)
+                count = count + 1                
+            
+            #coordSamplesPerSensor = np.concatenate((x,y),axis=1)
+    
+    return coordSamplesPerSensor
+
+def sampleisInCircle(sensor,sensorRadius,samplePoint,coordSamplesPerSensor,coordSensors):
+     isInCircle = 0
+     
+     if np.sqrt( (coordSamplesPerSensor[0][0][0]-coordSensors[0])**2 + (coordSamplesPerSensor[0][0][1]-coordSensors[1])**2 ) <= sensorRadius:
+         isInCircle = 1
+         
+     return isInCircle
+
+
+
+def computeAgeandArea(N,sensorRadius,coordSamplesPerSensor,coordSensors,selectedSensor):
+    allPartitions = []
+    samplesPerPartition = []
+    
+    for ii in range(len(coordSamplesPerSensor)):
+        templistofPartitions = []
+        for jj in range(N):
+            if sampleisInCircle(jj,sensorRadius,ii,coordSamplesPerSensor[ii],coordSensors[jj,:]):
+                templistofPartitions.append(jj+1)
+        
+        #creating list of non-empty partitions   
+        if templistofPartitions not in allPartitions:
+            allPartitions.append(templistofPartitions)
+    
+            l = len(samplesPerPartition)
+            samplesPerPartition.append(0) 
+            samplesPerPartition[l] = samplesPerPartition[l] + 1
+            
+        else:
+            # Find where does this partition fall and add a sample to the sample tube
+           temp = allPartitions.index(templistofPartitions)
+           samplesPerPartition[temp] = samplesPerPartition[temp] + 1
+           
+    return allPartitions, samplesPerPartition
+
+
+def baselineModel(capacity, mu, N, d, coordSensors, sensorRadius, coordBox, num_samples_per_sensor, scalingFactor):
+    ratePerSensor = capacity/(mu*d*N)
+    areaWeightedAge = 0.
+    coverageArea = 0.
+    allPartitions = []
+    samplesPerPartition = []
+    appearanceOfaPartition = []
+    agePerPartition = []
+    
+    for ii in range(N):
+        #Step 1: for each sensor, sample "samples_per_sensor" points and check how many partitions do they cover
+        coordSamplesPerSensor = SamplesPerSensor(coordSensors[ii,:],sensorRadius,coordBox,num_samples_per_sensor)
+        
+        #Step 2: check where does each sample fall
+        tempallPartitions, tempsamplesPerPartition = computeAgeandArea(N,sensorRadius,coordSamplesPerSensor,coordSensors,ii)
+        
+        for jj in range(len(tempallPartitions)):
+            if tempallPartitions[jj] not in allPartitions:
+                allPartitions.append(tempallPartitions[jj])
+                samplesPerPartition.append(tempsamplesPerPartition[jj])
+                appearanceOfaPartition.append(1)
+            else:
+                temp = allPartitions.index(tempallPartitions[jj])
+                samplesPerPartition[temp] = samplesPerPartition[temp] + samplesPerPartition[jj]
+                appearanceOfaPartition[temp] = appearanceOfaPartition[temp] + 1
+                
+        
+    numSamplesPerPartition = np.array(samplesPerPartition)/np.array(appearanceOfaPartition)
+    areaPerPartition = numSamplesPerPartition/num_samples_per_sensor*np.pi*sensorRadius**2*scalingFactor**2
+    coverageArea = np.sum(areaPerPartition)
+    
+    for ii in range(len(allPartitions)):
+        n = len(allPartitions[jj])
+        tempAge = d + (1./(n+1.))*(1/ratePerSensor)
+        agePerPartition.append(tempAge)
+        
+    areaWeightedAge = np.sum(areaPerPartition*agePerPartition)/coverageArea        
+# =============================================================================
+#     coverageArea = np.sum(partitionsArea)
+#     AgePerPartition = []
+#     for ii in range(len(partitionsArea)):
+#         n = len(allPossibleSets[ii])
+#         tempAge = d + (1./(n+1.))*(1/ratePerSensor) 
+#         #tempAge = (n+2.)/(n+1.)*(1/ratePerSensor)
+#         AgePerPartition.append(tempAge)
+#     
+#     areaWeightedAge = np.sum(partitionsArea*AgePerPartition)/coverageArea
+# =============================================================================
     
     return coverageArea, areaWeightedAge
 
@@ -347,7 +449,9 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
 
 def main(T=int(5e2)): 
     scalingFactor = 50
-    N = np.arange(1,10,1) # number of sensors
+    N = np.arange(3,4,1) # number of sensors
+    num_samples_per_sensor = 1000
+    
     lam = 1.
     sensorRadius = np.array(100/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
@@ -360,17 +464,8 @@ def main(T=int(5e2)):
     rectangleWidth = 10/scalingFactor
     areaR = rectangleLength*rectangleWidth*scalingFactor**2
     
-    numSquaresperLength = int(rectangleLength*10)
-    numSquaresperWidth = int(rectangleWidth*10)
-    
-    pixelLength = rectangleLength/numSquaresperLength
-    pixelWidth = rectangleWidth/numSquaresperWidth
-    
-    xPosCenterPixel1 = pixelLength/2
-    yPosCenterPixel1 = pixelWidth/2
-    
-    coordPixels = generatePixelsCenters(xPosCenterPixel1, yPosCenterPixel1, pixelLength, pixelWidth, numSquaresperLength, numSquaresperWidth)
-
+    # the coordinates of the box are: x_min, x_max, y_min, y_max
+    coordBox = np.array([0.,rectangleLength,0.,rectangleWidth])
 
     coverageAreaBaseline = []
     areaWeightedAgeBaseline = []
@@ -398,11 +493,12 @@ def main(T=int(5e2)):
              ycoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleWidth-0)
              coordSensors = np.concatenate((xcoordSensors,ycoordSensors),axis=1)
              #coordSensors  = np.array([[0.346256,0.794008],[17.6222,1.67842],[1.60685,1.52488],[17.6952,0.376898],[14.8532,1.3532],[5.21618,1.56915],[17.8326,0.501913],[13.8915,0.141149],[0.0616458,0.807074],[12.3948,0.727091]])
-             partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,N[ii])
              
-             tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[ii]*mu*d), d, partitionsArea*scalingFactor**2 , allPossibleSets, scalingFactor)
-             tempcoverageAreaSensSelec , tempareaWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N[ii], d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam ,thresh = 2.)
-             tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, mu, capacity , partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor , rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, T, lam ,thresh = 2.)
+             #partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,N[ii])
+             
+             tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity, mu, N[ii], d, coordSensors, sensorRadius, coordBox, num_samples_per_sensor, scalingFactor)
+             #tempcoverageAreaSensSelec , tempareaWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N[ii], d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam ,thresh = 2.) 
+             #tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, mu, capacity , partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor , rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, T, lam ,thresh = 2.)
              
      
              temp1coverageAreaBaseline.append(tempcoverageAreaBaseline)
