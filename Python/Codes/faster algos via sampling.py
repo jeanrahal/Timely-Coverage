@@ -469,77 +469,6 @@ def compute_delta_b(N, d, mu, coordSensors, setofSelectedSensors, setofSensors, 
 
 
 
-#def new_compute_b(N, d, mu, coordSensors, setofSelectedSensors, setofSensors, ratePerSensor, currSensor, sensorRadius, num_samples_per_sensor, numIsInCircle, coordSamplesPerSensor, oldcoverageArea, oldareaWeightedAge, scalingFactor, areaR, lam):
-#    b = 0.
-#    allPartitions = []
-#    samplesPerPartition = []
-#    appearanceOfaPartition = []
-#    agePerPartition = []
-#    coordSelectedSensors = []
-#        
-#    if not setofSelectedSensors:
-#        currSensors = currSensor
-#        coordSelectedSensors.append([])
-#        coordSelectedSensors[0].append(coordSensors[currSensors-1,:])
-#        
-#        #coordSelectedSensors = np.array(coordSelectedSensors)        
-#        tempallPartitions, tempsamplesPerPartition = newcomputeAgeandArea(currSensors,coordSelectedSensors,sensorRadius,coordSamplesPerSensor,numIsInCircle)
-#        
-#        for jj in range(len(tempallPartitions)):
-#            if tempallPartitions[jj] not in allPartitions:
-#                allPartitions.append(tempallPartitions[jj])
-#                samplesPerPartition.append(tempsamplesPerPartition[jj])
-#                #percentageSamplesPerPartition.append(tempsamplesPerPartition[jj]/numIsInCircle)
-#                appearanceOfaPartition.append(1)
-#            else:
-#                temp = allPartitions.index(tempallPartitions[jj])
-#                samplesPerPartition[temp] = samplesPerPartition[temp] + tempsamplesPerPartition[jj]
-#                #percentageSamplesPerPartition[temp] = percentageSamplesPerPartition[temp] + tempsamplesPerPartition[jj]/numIsInCircle
-#                appearanceOfaPartition[temp] = appearanceOfaPartition[temp] + 1
-#                
-#    else:
-#        currSensors = copy.copy(setofSelectedSensors)
-#        currSensors.append(currSensor)
-#        currSensors = np.sort(currSensors)
-#        #Step 2: check where does each sample fall
-#        for ii in range(len(currSensors)):
-#            coordSelectedSensors.append([])
-#            coordSelectedSensors[ii].append(coordSensors[currSensors[ii]-1,:])
-#        
-#        #coordSelectedSensors = np.array(coordSelectedSensors)        
-#        tempallPartitions, tempsamplesPerPartition = newcomputeAgeandArea(currSensors,coordSelectedSensors,sensorRadius,coordSamplesPerSensor,numIsInCircle)
-#        
-#        for jj in range(len(tempallPartitions)):
-#            if tempallPartitions[jj] not in allPartitions:
-#                allPartitions.append(tempallPartitions[jj])
-#                samplesPerPartition.append(tempsamplesPerPartition[jj])
-#                #percentageSamplesPerPartition.append(tempsamplesPerPartition[jj]/numIsInCircle)
-#                appearanceOfaPartition.append(1)
-#            else:
-#                temp = allPartitions.index(tempallPartitions[jj])
-#                samplesPerPartition[temp] = samplesPerPartition[temp] + tempsamplesPerPartition[jj]
-#                #percentageSamplesPerPartition[temp] = percentageSamplesPerPartition[temp] + tempsamplesPerPartition[jj]/numIsInCircle
-#                appearanceOfaPartition[temp] = appearanceOfaPartition[temp] + 1
-#                
-#        
-#    percentageSamplesPerPartition = np.array(samplesPerPartition)/np.array(appearanceOfaPartition)/num_samples_per_sensor
-#    areaPerPartition = percentageSamplesPerPartition*np.pi*sensorRadius**2*scalingFactor**2
-#    coverageArea = np.sum(areaPerPartition) + oldcoverageArea
-#    
-#    for ii in range(len(allPartitions)):
-#        n = len(allPartitions[ii])
-#        tempAge = d + (1./(n+1.))*(1/ratePerSensor)
-#        agePerPartition.append(tempAge)
-#        
-#    areaWeightedAge = np.sum(areaPerPartition*agePerPartition) + oldareaWeightedAge
-#            
-#    
-#    a = areaWeightedAge + lam*(areaR-coverageArea)     
-#    a_empty = lam*areaR
-#    b = a_empty-a
-#    
-#    return b, coverageArea, areaWeightedAge
-
 
 
 def newcomputeAgeandArea(currSensors,coordSelectedSensors,sensorRadius,coordSamplesPerSensor,numIsInCircle):
@@ -572,16 +501,6 @@ def newcomputeAgeandArea(currSensors,coordSelectedSensors,sensorRadius,coordSamp
            samplesPerPartition[temp] = samplesPerPartition[temp] + 1
            
     return allPartitions, samplesPerPartition
-
-
-
-
-
-
-
-
-
-
 
 
 ######################################################
