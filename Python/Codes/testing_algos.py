@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 import copy
+import time
 import itertools 
 from scipy.integrate import quad
 from scipy.spatial import KDTree
@@ -258,7 +259,7 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
        numSelectedSensors = (k) 
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
-    #lam = d*(1.+2./3.*numSelectedSensors)
+    lam = d*(1.+2./3.*numSelectedSensors)
     
     new_max = 0.
     temp_b_old = 0.
@@ -294,7 +295,7 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
        numSelectedSensors = int(k) 
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
-    #lam = d*(1.+2./3.*numSelectedSensors)
+    lam = d*(1.+2./3.*numSelectedSensors)
     
     new_max = 0.
     temp_b_old = 0.
@@ -347,7 +348,7 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
 
 def main(T=int(5e2)): 
     scalingFactor = 50
-    N = np.arange(1,14,1) # number of sensors
+    N = np.arange(6,7,1) # number of sensors
     lam = 1.
     sensorRadius = np.array(100/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
@@ -381,7 +382,7 @@ def main(T=int(5e2)):
     areaWeightedAgeAgeMin =[]
     selectedSensorsAgeMin =[]
 
-    numIter = 8
+    numIter = 1
 
     for ii in range(len(N)):
          temp1coverageAreaBaseline = []
@@ -420,16 +421,16 @@ def main(T=int(5e2)):
      
              
          coverageAreaBaseline.append(np.sum(temp1coverageAreaBaseline)/numIter/areaR)
-         areaWeightedAgeBaseline.append(np.sum(temp1areaWeightedAgeBaseline)/numIter)
+         areaWeightedAgeBaseline.append(np.sum(temp1areaWeightedAgeBaseline)/numIter*1000.)
           
          coverageAreaSensSelec.append(np.sum(temp1coverageAreaSensSelec)/numIter/areaR)
-         areaWeightedAgeSensSelec.append(np.sum(temp1areaWeightedAgeSensSelec)/numIter)
+         areaWeightedAgeSensSelec.append(np.sum(temp1areaWeightedAgeSensSelec)/numIter*1000.)
          selectedSensorsSensSelec.append(np.sum(temp1selectedSensorsSensSelec)/numIter)
      
          
      
          coverageAreaAgeMin.append(np.sum(temp1coverageAreaAgeMin)/numIter/areaR)
-         areaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter)
+         areaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter*1000.)
          selectedSensorsAgeMin.append(np.sum(temp1selectedSensorsAgeMin)/numIter)        
      
     plt.clf()
@@ -441,9 +442,9 @@ def main(T=int(5e2)):
     plt.grid()
       #plt.yscale('log')
     plt.xlabel('Number of available sensors N', fontsize=12)
-    plt.ylabel('Normalized average weighted age (seconds)', fontsize=10)
-    plt.savefig('newAge2_N=1_14_lam=1.eps')
-    plt.savefig('newAge2_N=1_14_lam=1.pdf')
+    plt.ylabel('Normalized average weighted age [msec]', fontsize=10)
+    plt.savefig('newAge2_N=1_14_lam=lam_min.eps')
+    plt.savefig('newAge2_N=1_14_lam=lam_min.pdf')
       
     plt.clf()
     plt.plot(N , coverageAreaBaseline, '--', label='Baseline')
@@ -453,9 +454,9 @@ def main(T=int(5e2)):
     plt.legend()
     plt.grid()
     plt.xlabel('Number of available sensors N', fontsize=12)
-    plt.ylabel('Coverage', fontsize=10)
-    plt.savefig('newcovArea2_N=1_14_lam=1.eps')
-    plt.savefig('newcovArea2_N=1_14_lam=1.pdf')
+    plt.ylabel('Coverage [%]', fontsize=10)
+    plt.savefig('newcovArea2_N=1_14_lam=lam_min.eps')
+    plt.savefig('newcovArea2_N=1_14_lam=lam_min.pdf')
 
     
 if __name__ == "__main__":
