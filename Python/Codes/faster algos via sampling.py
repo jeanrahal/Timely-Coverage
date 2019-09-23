@@ -331,7 +331,7 @@ def newSensSelecModel(N, d, capacity, mu, coordSensors, sensorRadius, coordBox, 
     k = 4.
     #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
     if int(N)>int(k):
-       numSelectedSensors = (k) 
+       numSelectedSensors = int(k) 
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
     #lam = d*(1.+1./2.*numSelectedSensors)
@@ -356,13 +356,25 @@ def newSensSelecModel(N, d, capacity, mu, coordSensors, sensorRadius, coordBox, 
                     selectedSensor = jj+1
         
         setofSelectedSensors.append(selectedSensor)
+
+    coordSelectedSensors = []
+    count = 0
+    
+    for ii in range(N):
+        if ii+1 in setofSelectedSensors:
+            coordSelectedSensors.append([])
+            coordSelectedSensors[count].append(coordSensors[setofSelectedSensors[count]-1,:])
+            count = count + 1
     
     for ii in range(len(setofSelectedSensors)):
         #Step 1: for each sensor, sample "samples_per_sensor" points and check how many partitions do they cover
         numIsInCircle, coordSamplesPerSensor = SamplesPerSensor(coordSensors[setofSelectedSensors[ii]-1,:],sensorRadius,coordBox,num_samples_per_sensor)
         
         #Step 2: check where does each sample fall
-        tempallPartitions, tempsamplesPerPartition = computeAgeandArea(N,sensorRadius,coordSamplesPerSensor,numIsInCircle,coordSensors)
+
+            
+        #tempallPartitions, tempsamplesPerPartition = computeAgeandArea(numSelectedSensors,sensorRadius,coordSamplesPerSensor,numIsInCircle,coordSelectedSensors)
+        tempallPartitions, tempsamplesPerPartition = newcomputeAgeandArea(setofSelectedSensors,coordSelectedSensors,sensorRadius,coordSamplesPerSensor,numIsInCircle)
         
         for jj in range(len(tempallPartitions)):
             if tempallPartitions[jj] not in allPartitions:
@@ -390,7 +402,7 @@ def newSensSelecModel(N, d, capacity, mu, coordSensors, sensorRadius, coordBox, 
 
 
     
-    return coverageArea , areaWeightedAge/(coverageArea) , setofSelectedSensors
+    return coverageArea , areaWeightedAge, setofSelectedSensors
 
 def compute_delta_b(N, d, mu, coordSensors, setofSelectedSensors, setofSensors, ratePerSensor, currSensor, sensorRadius, num_samples_per_sensor, numIsInCircle, coordSamplesPerSensor, scalingFactor, areaR, lam):
     delta_b = 0.
@@ -460,15 +472,11 @@ def compute_delta_b(N, d, mu, coordSensors, setofSelectedSensors, setofSensors, 
             deltaAreaWeightedAge = deltaAreaWeightedAge-areaPerPartition[ii]*(d+1./2.*1./ratePerSensor)
         else:
             l = len(allPartitions[ii])
-            deltaAreaWeightedAge = deltaAreaWeightedAge + areaPerPartition[ii]*(-1./((l+1)*(l)))*1./ratePerSensor
+            deltaAreaWeightedAge = deltaAreaWeightedAge + areaPerPartition[ii]*(1./((l+1)*(l)))*1./ratePerSensor
     
     delta_b = deltaCoverageArea + deltaAreaWeightedAge 
       
     return delta_b
-
-
-
-
 
 
 def newcomputeAgeandArea(currSensors,coordSelectedSensors,sensorRadius,coordSamplesPerSensor,numIsInCircle):
@@ -655,8 +663,8 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
 
 def main(T=int(5e2)): 
     scalingFactor = 50
-    N = np.arange(2,9,1) # number of sensors
-    num_samples_per_sensor = 1000
+    N = np.arange(20,26,1) # number of sensors
+    num_samples_per_sensor = 3000
     
     lam = 1.
     sensorRadius = np.array(100/scalingFactor)#coverage radius per sensor
@@ -680,8 +688,7 @@ def main(T=int(5e2)):
     yPosCenterPixel1 = pixelWidth/2
     
     coordPixels = generatePixelsCenters(xPosCenterPixel1, yPosCenterPixel1, pixelLength, pixelWidth, numSquaresperLength, numSquaresperWidth)
-
-    
+ 
     # the coordinates of the box are: x_min, x_max, y_min, y_max
     coordBox = np.array([0.,rectangleLength,0.,rectangleWidth])
 
@@ -712,7 +719,7 @@ def main(T=int(5e2)):
     newareaWeightedAgeAgeMin =[]
     newselectedSensorsAgeMin =[]    
 
-    numIter = 20        
+    numIter = 40
 
     for ii in range(len(N)):
          temp1coverageAreaBaseline = []
