@@ -401,9 +401,9 @@ def newSensSelecModel(N, d, capacity, mu, coordSensors, sensorRadius, coordBox, 
         
     areaWeightedAge = np.sum(areaPerPartition*agePerPartition)/coverageArea
 
-
     
-    return coverageArea , areaWeightedAge, setofSelectedSensors
+    return coverageArea , areaWeightedAge, np.sort(setofSelectedSensors)
+
 
 def compute_delta_b(N, d, mu, coordSensors, setofSelectedSensors, setofSensors, ratePerSensor, currSensor, sensorRadius, num_samples_per_sensor, numIsInCircle, coordSamplesPerSensor, scalingFactor, areaR, lam):
     delta_b = 0.
@@ -473,7 +473,7 @@ def compute_delta_b(N, d, mu, coordSensors, setofSelectedSensors, setofSensors, 
             deltaAreaWeightedAge = deltaAreaWeightedAge-areaPerPartition[ii]*(d+1./2.*1./ratePerSensor)
         else:
             l = len(allPartitions[ii])
-            deltaAreaWeightedAge = deltaAreaWeightedAge + areaPerPartition[ii]*(1./((l+1)*(l)))*1./ratePerSensor
+            deltaAreaWeightedAge = deltaAreaWeightedAge + areaPerPartition[ii]*(1./((l+1)*(l+2)))*1./ratePerSensor
     
     delta_b = deltaCoverageArea + deltaAreaWeightedAge 
       
@@ -572,7 +572,7 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
     k = 4.
     #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
     if int(N)>int(k):
-       numSelectedSensors = (k) 
+       numSelectedSensors = int(k) 
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
     #lam = d*(1.+1./2.*numSelectedSensors)
@@ -595,7 +595,7 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
                 
     #setofSelectedSensors = np.sort(setofSelectedSensors)
     
-    return coverageArea , areaWeightedAge/(coverageArea) , setofSelectedSensors
+    return coverageArea , areaWeightedAge/(coverageArea) , np.sort(setofSelectedSensors)
 
 
 def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangleLength , rectangleWidth , sensorRadius, scalingFactor , T, lam, thresh = 2.):
@@ -661,12 +661,87 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
 
 ##################################################################
 
+def compareSelectedSensors(tempselectedSensorsSensSelec,newtempselectedSensorsSensSelec):
+    numEqualSensors = 0
+    
+    for ii in range(len(tempselectedSensorsSensSelec)):
+        if tempselectedSensorsSensSelec[ii] in newtempselectedSensorsSensSelec:
+            numEqualSensors += 1
+            
+    perEqualSensors = numEqualSensors/len(tempselectedSensorsSensSelec)
+    
+    return perEqualSensors
+###################################################################
+
+def testSamplingSensorSelection(N, d, capacity, mu, setofSelectedSensors, coordSensors, sensorRadius, coordBox, num_samples_per_sensor, scalingFactor, lam, areaR, thresh = 2.):
+    coordSelectedSensors = []
+    count = 0
+    allPartitions = []
+    samplesPerPartition = []
+    appearanceOfaPartition = []
+    agePerPartition = []
+    percentageSamplesPerPartition = [] 
+
+    k = 4.
+    #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
+    if int(N)>int(k):
+       numSelectedSensors = int(k) 
+    
+    ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    #lam = d*(1.+1./2.*numSelectedSensors)
+
+    
+    for ii in range(N):
+        if ii+1 in setofSelectedSensors:
+            coordSelectedSensors.append([])
+            coordSelectedSensors[count].append(coordSensors[setofSelectedSensors[count]-1,:])
+            count = count + 1
+    
+    for ii in range(len(setofSelectedSensors)):
+        #Step 1: for each sensor, sample "samples_per_sensor" points and check how many partitions do they cover
+        numIsInCircle, coordSamplesPerSensor = SamplesPerSensor(coordSensors[setofSelectedSensors[ii]-1,:],sensorRadius,coordBox,num_samples_per_sensor)
+        
+        #Step 2: check where does each sample fall
+
+            
+        #tempallPartitions, tempsamplesPerPartition = computeAgeandArea(numSelectedSensors,sensorRadius,coordSamplesPerSensor,numIsInCircle,coordSelectedSensors)
+        tempallPartitions, tempsamplesPerPartition = newcomputeAgeandArea(setofSelectedSensors,coordSelectedSensors,sensorRadius,coordSamplesPerSensor,numIsInCircle)
+        
+        for jj in range(len(tempallPartitions)):
+            if tempallPartitions[jj] not in allPartitions:
+                allPartitions.append(tempallPartitions[jj])
+                samplesPerPartition.append(tempsamplesPerPartition[jj])
+                #percentageSamplesPerPartition.append(tempsamplesPerPartition[jj]/numIsInCircle)
+                appearanceOfaPartition.append(1)
+            else:
+                temp = allPartitions.index(tempallPartitions[jj])
+                samplesPerPartition[temp] = samplesPerPartition[temp] + tempsamplesPerPartition[jj]
+                #percentageSamplesPerPartition[temp] = percentageSamplesPerPartition[temp] + tempsamplesPerPartition[jj]/numIsInCircle
+                appearanceOfaPartition[temp] = appearanceOfaPartition[temp] + 1
+                
+        
+    percentageSamplesPerPartition = np.array(samplesPerPartition)/np.array(appearanceOfaPartition)/num_samples_per_sensor
+    areaPerPartition = percentageSamplesPerPartition*np.pi*sensorRadius**2*scalingFactor**2
+    coverageArea = np.sum(areaPerPartition)
+    
+    for ii in range(len(allPartitions)):
+        n = len(allPartitions[ii])
+        tempAge = d + (1./(n+1.))*(1/ratePerSensor)
+        agePerPartition.append(tempAge)
+        
+    areaWeightedAge = np.sum(areaPerPartition*agePerPartition)/coverageArea
+
+    
+    return coverageArea , areaWeightedAge
+
+###################################################################
+    
 
 def main(T=int(5e2)): 
     scalingFactor = 50
-    N = np.arange(14,19,1) # number of sensors
-    num_samples_per_sensor_sub = 5000
-    num_samples_per_sensor = 3000
+    N = np.arange(5,10,1) # number of sensors
+    num_samples_per_sensor_sub = 1000
+    num_samples_per_sensor = 10000
     
     lam = 1.
     sensorRadius = np.array(100/scalingFactor)#coverage radius per sensor
@@ -700,12 +775,10 @@ def main(T=int(5e2)):
     
     coverageAreaSensSelec = []
     areaWeightedAgeSensSelec = []
-    selectedSensorsSensSelec = []
     totalTimeSensSelec = []
     
     coverageAreaAgeMin = []
     areaWeightedAgeAgeMin =[]
-    selectedSensorsAgeMin =[]
  
     
     newcoverageAreaBaseline = []
@@ -714,13 +787,17 @@ def main(T=int(5e2)):
     
     newcoverageAreaSensSelec = []
     newareaWeightedAgeSensSelec = []
-    newselectedSensorsSensSelec = []
     newtotalTimeSensSelec = []
+    
+    compareSensors = []
     
     newcoverageAreaAgeMin = []
     newareaWeightedAgeAgeMin =[]
-    newselectedSensorsAgeMin =[]    
-    numIter = 15
+   
+    testSamplingAreaWeightedAge = []
+    testSamplingCovArea = []
+    
+    numIter = 25
 
     for ii in tqdm(range(len(N))):
          temp1coverageAreaBaseline = []
@@ -729,129 +806,137 @@ def main(T=int(5e2)):
          
          temp1coverageAreaSensSelec = []
          temp1areaWeightedAgeSensSelec = []
-         temp1selectedSensorsSensSelec = []
          temp1TotalTimeSensSelec = []
          
-         temp1coverageAreaAgeMin = []
-         temp1areaWeightedAgeAgeMin =[]
-         temp1selectedSensorsAgeMin =[]
+#         temp1coverageAreaAgeMin = []
+#         temp1areaWeightedAgeAgeMin =[]
+#         temp1selectedSensorsAgeMin =[]
+
+
+         newtemp1coverageAreaBaseline = []
+         newtemp1areaWeightedAgeBaseline = []
+         newtemp1TotalTimeBaseline = []
          
-         for jj in range(numIter):
+         newtemp1coverageAreaSensSelec = []
+         newtemp1areaWeightedAgeSensSelec = []
+         newtemp1TotalTimeSensSelec = []
+         
+         newtemp1coverageAreaAgeMin = []
+         newtemp1areaWeightedAgeAgeMin = []
+         newtemp1selectedSensorsAgeMin = []
+
+         tempcompareSensors = []
+         
+         temp1testcoverageAreaSensSelec = []
+         temp1testareaWeightedAgeSensSelec = []
+         
+         for jj in (range(numIter)):
              xcoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleLength-0) 
              ycoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleWidth-0)
              coordSensors = np.concatenate((xcoordSensors,ycoordSensors),axis=1)
 
+             ############### this part is only used for the old model ############
              startTimeFindPartitions = time.time()
              partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,N[ii])
              endTimeFindPartitions = time.time()
+             ####################################################################
              
+             #### Baseline Old  ##########################################
              startTimeBaseline = time.time()
              tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[ii]*mu*d), d, partitionsArea*scalingFactor**2 , allPossibleSets, scalingFactor)
              endTimeBaseline  = time.time()
+
+             temp1coverageAreaBaseline.append(tempcoverageAreaBaseline)
+             temp1areaWeightedAgeBaseline.append(tempareaWeightedAgeBaseline)
+             temp1TotalTimeBaseline.append((endTimeFindPartitions-startTimeFindPartitions)+(endTimeBaseline-startTimeBaseline))
+            ##############################################################
             
+            #### Baseline New  ###########################################
+             startTimeBaseline = time.time()
+             tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = newbaselineModel(capacity, mu, N[ii], d, coordSensors, sensorRadius, coordBox, num_samples_per_sensor, scalingFactor)
+             endTimeBaseline = time.time()            
+            
+             newtemp1coverageAreaBaseline.append(tempcoverageAreaBaseline)
+             newtemp1areaWeightedAgeBaseline.append(tempareaWeightedAgeBaseline)
+             newtemp1TotalTimeBaseline.append(endTimeBaseline-startTimeBaseline)
+            #############################################################
+             
+            ##### Sensor Selection Old ########################
              startTimeSensSelec = time.time()
              tempcoverageAreaSensSelec , tempareaWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N[ii], d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, lam, areaR, thresh = 2.)
              endTimeSensSelec = time.time()
              
-#             tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, mu, capacity , partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor , rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, T, lam ,thresh = 2.)
-   
-             temp1coverageAreaBaseline.append(tempcoverageAreaBaseline)
-             temp1areaWeightedAgeBaseline.append(tempareaWeightedAgeBaseline)
-             temp1TotalTimeBaseline.append((endTimeFindPartitions-startTimeFindPartitions)+(endTimeBaseline-startTimeBaseline))
-             
              temp1coverageAreaSensSelec.append(tempcoverageAreaSensSelec)
              temp1areaWeightedAgeSensSelec.append(tempareaWeightedAgeSensSelec)
-             temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
              temp1TotalTimeSensSelec.append((endTimeFindPartitions-startTimeFindPartitions)+(endTimeSensSelec-startTimeSensSelec))
-        
+             ###################################################
+
+            ##### Sensor Selection New ########################
+             startTimeSensSelec = time.time()
+             tempcoverageAreaSensSelec, tempareaWeightedAgeSensSelec, newtempselectedSensorsSensSelec = newSensSelecModel(N[ii], d, capacity , mu, coordSensors, sensorRadius, coordBox, num_samples_per_sensor_sub, num_samples_per_sensor, scalingFactor, lam, areaR, thresh = 2.) 
+             endTimeSensSelec = time.time()            
+            
+             newtemp1coverageAreaSensSelec.append(tempcoverageAreaSensSelec)
+             newtemp1areaWeightedAgeSensSelec.append(tempareaWeightedAgeSensSelec)
+             newtemp1TotalTimeSensSelec.append(endTimeSensSelec-startTimeSensSelec)            
+            ####################################################
+            
+            ###### Compare the selected sensors between OLD and NEW Sensor selection schemes ################
+             perEqualSensors = compareSelectedSensors(tempselectedSensorsSensSelec,newtempselectedSensorsSensSelec)
+             tempcompareSensors.append(perEqualSensors)
+#             tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, mu, capacity , partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor , rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, T, lam ,thresh = 2.)
+   
+
+            ###### Testing NEW sensor selection efficiency  ################
+             testcoverageAreaSensSelec, testareaWeightedAgeSensSelec = testSamplingSensorSelection(N[ii], d, capacity , mu, tempselectedSensorsSensSelec, coordSensors, sensorRadius, coordBox, num_samples_per_sensor, scalingFactor, lam, areaR, thresh = 2.) 
+             temp1testareaWeightedAgeSensSelec.append(testareaWeightedAgeSensSelec)
+             temp1testcoverageAreaSensSelec.append(testcoverageAreaSensSelec)
+             
      
 #             temp1coverageAreaAgeMin.append(tempcoverageAreaAgeMin)
 #             temp1areaWeightedAgeAgeMin.append(tempareaWeightedAgeAgeMin)
 #             temp1selectedSensorsAgeMin.append(len(tempselectedSensorsAgeMin))
      
-             
+         ############################ Baseline ###################################################    
          coverageAreaBaseline.append(np.sum(temp1coverageAreaBaseline)/numIter/areaR*100)
          areaWeightedAgeBaseline.append(np.sum(temp1areaWeightedAgeBaseline)/numIter*1000.)
          totalTimeBaseline.append(np.sum(temp1TotalTimeBaseline)/numIter) 
          
+         newcoverageAreaBaseline.append(np.sum(newtemp1coverageAreaBaseline)/numIter/areaR*100)
+         newareaWeightedAgeBaseline.append(np.sum(newtemp1areaWeightedAgeBaseline)/numIter*1000.)
+         newtotalTimeBaseline.append(np.sum(newtemp1TotalTimeBaseline)/numIter) 
+         ########################################################################################
+
+         ############################ Sensor Selection #########################################         
          coverageAreaSensSelec.append(np.sum(temp1coverageAreaSensSelec)/numIter/areaR*100)
          areaWeightedAgeSensSelec.append(np.sum(temp1areaWeightedAgeSensSelec)/numIter*1000.)
-         selectedSensorsSensSelec.append(np.sum(temp1selectedSensorsSensSelec)/numIter)
          totalTimeSensSelec.append(np.sum(temp1TotalTimeSensSelec)/numIter) 
 
-     
+         newcoverageAreaSensSelec.append(np.sum(newtemp1coverageAreaSensSelec)/numIter/areaR*100)
+         newareaWeightedAgeSensSelec.append(np.sum(newtemp1areaWeightedAgeSensSelec)/numIter*1000.)
+         newtotalTimeSensSelec.append(np.sum(newtemp1TotalTimeSensSelec)/numIter) 
+         
+         compareSensors.append(np.sum(tempcompareSensors)/numIter*100)
+         ##################################################################################
+         
+         ################  Testing the sampling technique  #########################
+         testSamplingAreaWeightedAge.append(np.sum(temp1testareaWeightedAgeSensSelec)/numIter*1000)
+         testSamplingCovArea.append(np.sum(temp1testcoverageAreaSensSelec)/numIter/areaR*100)
+         
 #         coverageAreaAgeMin.append(np.sum(temp1coverageAreaAgeMin)/numIter/areaR)
-#         areaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter*1000.)
-#         selectedSensorsAgeMin.append(np.sum(temp1selectedSensorsAgeMin)/numIter)        
+#         areaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter*1000.)     
 
+##########################################################################################
+###############################        PLOTS         #####################################
+##########################################################################################
 
-    for ii in tqdm(range(len(N))):
-         temp1coverageAreaBaseline = []
-         temp1areaWeightedAgeBaseline = []
-         temp1TotalTimeBaseline = []
-         
-         temp1coverageAreaSensSelec = []
-         temp1areaWeightedAgeSensSelec = []
-         temp1selectedSensorsSensSelec = []
-         temp1TotalTimeSensSel = []
-         
-         temp1coverageAreaAgeMin = []
-         temp1areaWeightedAgeAgeMin =[]
-         temp1selectedSensorsAgeMin =[]
-         
-         
-         for jj in range(numIter):
-             xcoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleLength-0) 
-             ycoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleWidth-0)
-             coordSensors = np.concatenate((xcoordSensors,ycoordSensors),axis=1)
-             
-             startTimeBaseline = time.time()
-             tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = newbaselineModel(capacity, mu, N[ii], d, coordSensors, sensorRadius, coordBox, num_samples_per_sensor, scalingFactor)
-             endTimeBaseline = time.time()
-             
-             startTimeSensSelec = time.time()
-             tempcoverageAreaSensSelec, tempareaWeightedAgeSensSelec, tempselectedSensorsSensSelec = newSensSelecModel(N[ii], d, capacity , mu, coordSensors, sensorRadius, coordBox, num_samples_per_sensor_sub, num_samples_per_sensor, scalingFactor, lam, areaR, thresh = 2.) 
-             endTimeSensSelec = time.time()
-             
-             #tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, mu, capacity , partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor , rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, T, lam ,thresh = 2.)
-             
-             
-             temp1coverageAreaBaseline.append(tempcoverageAreaBaseline)
-             temp1areaWeightedAgeBaseline.append(tempareaWeightedAgeBaseline)
-             temp1TotalTimeBaseline.append(endTimeBaseline-startTimeBaseline)
-
-             
-             temp1coverageAreaSensSelec.append(tempcoverageAreaSensSelec)
-             temp1areaWeightedAgeSensSelec.append(tempareaWeightedAgeSensSelec)
-             temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
-             temp1TotalTimeSensSelec.append(endTimeSensSelec-startTimeSensSelec)
-        
-     
-#             temp1coverageAreaAgeMin.append(tempcoverageAreaAgeMin)
-#             temp1areaWeightedAgeAgeMin.append(tempareaWeightedAgeAgeMin)
-#             temp1selectedSensorsAgeMin.append(len(tempselectedSensorsAgeMin))
-     
-             
-         newcoverageAreaBaseline.append(np.sum(temp1coverageAreaBaseline)/numIter/areaR*100)
-         newareaWeightedAgeBaseline.append(np.sum(temp1areaWeightedAgeBaseline)/numIter*1000.)
-         newtotalTimeBaseline.append(np.sum(temp1TotalTimeBaseline)/numIter)  
-         
-         newcoverageAreaSensSelec.append(np.sum(temp1coverageAreaSensSelec)/numIter/areaR*100)
-         newareaWeightedAgeSensSelec.append(np.sum(temp1areaWeightedAgeSensSelec)/numIter*1000.)
-         newselectedSensorsSensSelec.append(np.sum(temp1selectedSensorsSensSelec)/numIter)
-         newtotalTimeSensSelec.append(np.sum(temp1TotalTimeSensSelec)/numIter) 
-     
-         
-#     
-#         newcoverageAreaAgeMin.append(np.sum(temp1coverageAreaAgeMin)/numIter/areaR)
-#         newareaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter*1000.)
-#         newselectedSensorsAgeMin.append(np.sum(temp1selectedSensorsAgeMin)/numIter)        
-     
+###############  Plot Age ############################     
     plt.clf()
     plt.plot(N , areaWeightedAgeBaseline, 'b' , label='Baseline')
     plt.plot(N , newareaWeightedAgeBaseline, 'b--', label='Sampling Baseline')
     plt.plot(N , areaWeightedAgeSensSelec, 'r',label='Sensor Selection')
     plt.plot(N , newareaWeightedAgeSensSelec, 'r--',label='Sampling Sensor Selection')
+    plt.plot(N , testSamplingAreaWeightedAge, 'g--',label='Test Sampling Sensor Selection')
     #plt.plot(N , areaWeightedAgeAgeMin, label='Age Minimization')
      #plt.title('Area weighted age as a function of the number of selected sensors', fontsize=12)
     plt.legend()
@@ -859,22 +944,25 @@ def main(T=int(5e2)):
       #plt.yscale('log')
     plt.xlabel('Number of available sensors N', fontsize=12)
     plt.ylabel('Normalized average weighted age [msec]', fontsize=10)
-    plt.savefig('oldSampledAge_N=14_19.eps')
-    plt.savefig('oldSampledAge_N=14_19.pdf')
-      
+    plt.savefig('SampledAge_N=2_10.eps')
+    plt.savefig('SampledAge_N=2_10.pdf')
+######################################################      
+    
+#####################   Coverage #####################    
     plt.clf()
     plt.plot(N , coverageAreaBaseline, 'b',  label='Baseline')
     plt.plot(N , newcoverageAreaBaseline, 'b--', label='Sampling Baseline')
     plt.plot(N , coverageAreaSensSelec, 'r',label='Sensor Selection')
     plt.plot(N , newcoverageAreaSensSelec, 'r--',label='Sampling Sensor Selection')
+    plt.plot(N , testSamplingCovArea, 'g--',label='Test Sampling Sensor Selection')
     #plt.plot(N , coverageAreaAgeMin, label='Age Minimization')
      #plt.title('Coverage Area as a function of the number of selected sensors', fontsize=12)
     plt.legend()
     plt.grid()
     plt.xlabel('Number of available sensors N', fontsize=12)
     plt.ylabel('Coverage Area [%]', fontsize=10)
-    plt.savefig('oldSampledCov_N=14_19.eps')
-    plt.savefig('oldSampledCov_N=14_19.pdf')
+    plt.savefig('SampledCov_N=2_10.eps')
+    plt.savefig('SampledCov_N=2_10.pdf')
     
     plt.clf()
     plt.plot(N , totalTimeBaseline, 'b',  label='Baseline')
@@ -886,9 +974,20 @@ def main(T=int(5e2)):
     plt.grid()
     plt.xlabel('Number of available sensors N', fontsize=12)
     plt.ylabel('Algorithm running time [sec]', fontsize=10)
-    plt.savefig('oldSampledAlgoRunTime_N=14_19.eps')
-    plt.savefig('oldSampledAlgoRunTime_N=14_19.pdf')    
-
+    plt.savefig('SampledAlgoRunTime_N=2_10.eps')
+    plt.savefig('SampledAlgoRunTime_N=2_10.pdf')    
+#####################################################
+    
+##################  Compare Selected Sensors     ####    
+    plt.clf()
+    plt.plot(N , compareSensors, 'b',  label='Sensor Selection')
+    plt.legend()
+    plt.grid()
+    plt.xlabel('Number of available sensors N', fontsize=12)
+    plt.ylabel('Accuracy of sampling technique [%]', fontsize=10)
+    plt.savefig('Accuracy_N=2_10.eps')
+    plt.savefig('Accuracy_N=2_10.pdf')
+    
     
 if __name__ == "__main__":
     main()
