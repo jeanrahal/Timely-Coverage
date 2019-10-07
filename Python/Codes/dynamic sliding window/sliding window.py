@@ -232,7 +232,7 @@ def compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, rate
     return b, totalCoveredArea, areaWeightedAge, selectedPartitionsArea
 
 #@jit(target ="cuda")  
-def GreedySensSelecModel(N, k, d, capacity, mu, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, coordSensors, lam, thresh = 2.):
+def GreedySensSelecModel(N, k, d, capacity, mu, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, coordSensors, lam):
     areaWeightedAge = 0.
     coverageArea = np.sum(partitionsArea)
     numSelectedSensors = N
@@ -271,7 +271,7 @@ def GreedySensSelecModel(N, k, d, capacity, mu, partitionsArea , allPossibleSets
 
 
 
-def StreamSensSelecModel(N, k, d, capacity, mu, coordprevSelectedSensors, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, coordSensors, lam, thresh = 2.):
+def StreamSensSelecModel(N, k, d, capacity, mu, coordprevSelectedSensors, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, coordSensors, lam):
     areaWeightedAge = 0.
     coverageArea = np.sum(partitionsArea)
     coordSelectedSensors = []
@@ -311,15 +311,19 @@ def StreamSensSelecModel(N, k, d, capacity, mu, coordprevSelectedSensors, partit
         coordSelectedSensors.append(coordSensors[-1])           
         
     selectedSensors = findsetofSelecSensors(coordSelectedSensors,coordSensors,-1)
+    new_max, coverageArea, areaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, selectedSensors, setofSensors, ratePerSensor, [], allPossibleSets, lam)
+
     
     return coverageArea , areaWeightedAge/(coverageArea) , new_max, selectedSensors, coordSelectedSensors #new_max is b_new
 
 
-def ThreshSensSelecModel(N, k, d, capacity, mu, coordprevSelectedSensors, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, coordSensors, lam, thresh = 2.):
+def ThreshSensSelecModel(N, k, d, capacity, mu, coordprevSelectedSensors, partitionsArea, allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, coordSensors, lam, counter, thresh):
     areaWeightedAge = 0.
     coverageArea = np.sum(partitionsArea)
     coordSelectedSensors = []
     setofSensors = np.arange(1,N+1,1)
+    startTime = 0.
+    endTime = 0.
         #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
     
     numSelectedSensors = int(k) 
@@ -335,32 +339,43 @@ def ThreshSensSelecModel(N, k, d, capacity, mu, coordprevSelectedSensors, partit
         new_max, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, ratePerSensor, len(coordSensors), allPossibleSets, lam)
         coordSelectedSensors.append(coordSensors[-1]) 
     else:
-        new_max = 0.
-        for ii in range(int(numSelectedSensors)):
-            setofSelectedSensors = findsetofSelecSensors(coordprevSelectedSensors,coordSensors,ii+1) #remove one sensor in each iteration, sensor 'ii'
-            b_new, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, ratePerSensor, len(coordSensors), allPossibleSets, lam) #we add the last sensor cuz he's the freshest
-            if  b_new >= new_max:
-                new_max = b_new
-                removedSensorCoord = []
-                removedSensorCoord.append(coordprevSelectedSensors[ii:][0])
-                coverageArea = tempcoverageArea
-                areaWeightedAge = tempareaWeightedAge
-        
-        
-        for ii in range(len(coordSensors)):
-            if (coordSensors[ii,:]) in np.array(coordprevSelectedSensors):
-                if np.sum((coordSensors[ii,:]) != removedSensorCoord) != 0:
-                    coordSelectedSensors.append(coordSensors[ii,:]) 
-         # Append the new sensor at the end:
-        coordSelectedSensors.append(coordSensors[-1])           
-        
+        b_of_previous_sensors = []
+        setofSelectedSensors = findsetofSelecSensors(coordprevSelectedSensors,coordSensors,-1)
+        # Compute b of the previous sensors
+        startTime = time.time()
+        for ii in range(len(setofSelectedSensors)):
+            old_b, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, [], setofSensors, ratePerSensor, setofSelectedSensors[ii], allPossibleSets, lam)
+            b_of_previous_sensors.append(old_b)
+        endTime = time.time()    
+        # Compute b of the newly added sensor
+        b_new_sensor, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, [], setofSensors, ratePerSensor, len(coordSensors), allPossibleSets, lam)
+        if b_new_sensor > thresh*min(b_of_previous_sensors):  
+            idxMin = b_of_previous_sensors.index(min(b_of_previous_sensors))
+            b_of_previous_sensors.remove(min(b_of_previous_sensors))
+            list(setofSelectedSensors).remove(setofSelectedSensors[idxMin])
+
+            coordSelectedSensors = coordprevSelectedSensors
+            coordSelectedSensors = list(np.delete(np.array(coordSelectedSensors),idxMin,0))            
+
+            setofSelectedSensors = findsetofSelecSensors(coordprevSelectedSensors,coordSensors,-1)
+            new_max, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, ratePerSensor, len(coordSensors), allPossibleSets, lam)
+
+            coordSelectedSensors.append(coordSensors[-1])
+            
+            counter = counter + 1
+
+        else:
+            #no change in previous sensors
+            coordSelectedSensors = coordprevSelectedSensors
+            #coordSelectedSensors.append(coordSensors[-1])
+            setofSelectedSensors = findsetofSelecSensors(coordprevSelectedSensors,coordSensors,-1)
+            new_max, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, ratePerSensor, [], allPossibleSets, lam)
+                        
+                            
     selectedSensors = findsetofSelecSensors(coordSelectedSensors,coordSensors,-1)
-    
-    return coverageArea , areaWeightedAge/(coverageArea) , new_max, selectedSensors, coordSelectedSensors #new_max is b_new
-
-
-
-
+    new_max, coverageArea, areaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, selectedSensors, setofSensors, ratePerSensor, [], allPossibleSets, lam)
+        
+    return coverageArea , areaWeightedAge/(coverageArea) , new_max, selectedSensors, coordSelectedSensors, (endTime-startTime), counter #new_max is b_new
 
 
 
@@ -387,7 +402,7 @@ def check_k(selectedSensors,CoordSelectedSensors):
 
 def main(T=int(5e2)): 
     scalingFactor = 50
-    N = 20 # number of sensors
+    N = 100 # number of sensors
     k = 4 # number of selected sensors
     W = 10 # window size
 
@@ -400,6 +415,8 @@ def main(T=int(5e2)):
 
     #lam = 1.
     lam = d*(1.+2./3.*k)
+    
+    thresh = 1
     
     rectangleLength = 500/scalingFactor
     rectangleWidth = 10/scalingFactor
@@ -421,13 +438,22 @@ def main(T=int(5e2)):
     areaWeightedAgeGreedySensSelec = []
     Greedysubmodfunc = []
     AvgGreedysubmodfunc = []
+    GreedyTime = []
     
     coverageAreaStreamSensSelec = []
     areaWeightedAgeStreamSensSelec = []
     Streamsubmodfunc = []
     AvgStreamsubmodfunc = []
+    StreamTime = []
+
+    coverageAreaThreshSensSelec = []
+    areaWeightedAgeThreshSensSelec = []
+    Threshsubmodfunc = []
+    AvgThreshsubmodfunc = []
+    ThreshTime = []
+    counterVec = []
     
-    numIter = 2
+    numIter = 10
         
      
     for jj in range(numIter):
@@ -440,18 +466,29 @@ def main(T=int(5e2)):
         temp1areaWeightedAgeGreedySensSelec = []
         temp1Greedysubmodfunc = []
         temp2Greedysubmodfunc = []
+        temp1TotalTimeGreedySensSelec = []
         
         temp1coverageAreaStreamSensSelec = []
         temp1areaWeightedAgeStreamSensSelec = []
         temp1Streamsubmodfunc = []            
         temp2Streamsubmodfunc = []
+        temp1TotalTimeStreamSensSelec = []
 
+        temp1coverageAreaThreshSensSelec = []
+        temp1areaWeightedAgeThreshSensSelec = []
+        temp1Threshsubmodfunc = []            
+        temp2Threshsubmodfunc = []
+        temp1TotalTimeThreshSensSelec = []
+
+        counter = 0.
         
         for ii in range(len(coordSensors)-W+1):
             partitionsArea, allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels, coordSensors[ii:ii+W], sensorRadius,W)
 
             # Greedy 
-            tempcoverageAreaGreedySensSelec , tempareaWeightedAgeGreedySensSelec , b_new_SensSelec , tempselectedSensorsGreedySensSelec, tempcoordSelectedSensorsGreedy = GreedySensSelecModel(W, k, d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, coordSensors[ii:ii+W], lam ,thresh = 2.)
+            startTimeGreedySensSelec = time.time()
+            tempcoverageAreaGreedySensSelec , tempareaWeightedAgeGreedySensSelec , b_new_SensSelec , tempselectedSensorsGreedySensSelec, tempcoordSelectedSensorsGreedy = GreedySensSelecModel(W, k, d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, coordSensors[ii:ii+W], lam)
+            endTimeGreedySensSelec = time.time()
             
             if ii==0:
                 tempCoordSelectedSensorsStream = tempcoordSelectedSensorsGreedy
@@ -459,50 +496,91 @@ def main(T=int(5e2)):
                 tempareaWeightedAgeStreamSensSelec = tempareaWeightedAgeGreedySensSelec
                 b_new_Stream = b_new_SensSelec
                 tempselectedSensorsStreamSensSelec = tempselectedSensorsGreedySensSelec
+                startTimeStreamSensSelec = startTimeGreedySensSelec
+                endTimeStreamSensSelec = endTimeGreedySensSelec
+                
+                tempCoordSelectedSensorsThresh = tempcoordSelectedSensorsGreedy
+                tempcoverageAreaThreshSensSelec = tempcoverageAreaGreedySensSelec
+                tempareaWeightedAgeThreshSensSelec = tempareaWeightedAgeGreedySensSelec
+                b_new_Thresh = b_new_SensSelec
+                tempselectedSensorsThreshSensSelec = tempselectedSensorsGreedySensSelec   
+                startTimeThreshSensSelec = startTimeGreedySensSelec
+                endTimeThreshSensSelec = endTimeGreedySensSelec
+                extraTimeThresh = 0
             else:
-                #Check if a sensor in the 'k' selected sensors has been removed: return coords of selected sensors without the sensor that left the window
-                tempCoordSelectedSensorsStream = check_k(tempselectedSensorsStreamSensSelec,tempCoordSelectedSensorsStream)
                 # Stream Algo
-                tempcoverageAreaStreamSensSelec , tempareaWeightedAgeStreamSensSelec , b_new_Stream , tempselectedSensorsStreamSensSelec, tempCoordSelectedSensorsStream = StreamSensSelecModel(W, k, d, capacity , mu, tempCoordSelectedSensorsStream, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, coordSensors[ii:ii+W], lam ,thresh = 2.)
+                #Check if a sensor in the 'k' selected sensors has been removed: return coords of selected sensors without the sensor that left the window
+                tempCoordSelectedSensorsStream = check_k(tempselectedSensorsStreamSensSelec,tempCoordSelectedSensorsStream)                
+                startTimeStreamSensSelec = time.time()
+                tempcoverageAreaStreamSensSelec , tempareaWeightedAgeStreamSensSelec , b_new_Stream , tempselectedSensorsStreamSensSelec, tempCoordSelectedSensorsStream = StreamSensSelecModel(W, k, d, capacity , mu, tempCoordSelectedSensorsStream, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, coordSensors[ii:ii+W], lam)
+                endTimeStreamSensSelec = time.time()
+                
                 # Thresh Algo
-                tempcoverageAreaThreshSensSelec , tempareaWeightedAgeThreshSensSelec , b_new_Thresh , tempselectedSensorsThreshSensSelec, tempCoordSelectedSensorsThresh = ThreshSensSelecModel(W, k, d, capacity , mu, tempCoordSelectedSensorsStream, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, coordSensors[ii:ii+W], lam ,thresh = 2.)
+                #Check if a sensor in the 'k' selected sensors has been removed: return coords of selected sensors without the sensor that left the window
+                tempCoordSelectedSensorsThresh = check_k(tempselectedSensorsThreshSensSelec,tempCoordSelectedSensorsThresh)
+                startTimeThreshSensSelec = time.time()
+                tempcoverageAreaThreshSensSelec , tempareaWeightedAgeThreshSensSelec , b_new_Thresh , tempselectedSensorsThreshSensSelec, tempCoordSelectedSensorsThresh, extraTimeThresh, counter = ThreshSensSelecModel(W, k, d, capacity , mu, tempCoordSelectedSensorsThresh, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, coordSensors[ii:ii+W], lam, counter, thresh)
+                endTimeThreshSensSelec = time.time()
             
             # Greedy
             temp1coverageAreaGreedySensSelec.append(tempcoverageAreaGreedySensSelec/areaR*100.)
             temp1areaWeightedAgeGreedySensSelec.append(tempareaWeightedAgeGreedySensSelec*1000.)
             temp1Greedysubmodfunc.append(b_new_SensSelec)
             temp2Greedysubmodfunc.append((1./(ii+1))*np.sum(temp1Greedysubmodfunc))
+            temp1TotalTimeGreedySensSelec.append(endTimeGreedySensSelec-startTimeGreedySensSelec)
             
             # Stream
             temp1coverageAreaStreamSensSelec.append(tempcoverageAreaStreamSensSelec/areaR*100.)
             temp1areaWeightedAgeStreamSensSelec.append(tempareaWeightedAgeStreamSensSelec*1000.)
             temp1Streamsubmodfunc.append(b_new_Stream)
             temp2Streamsubmodfunc.append((1./(ii+1))*np.sum(temp1Streamsubmodfunc))
+            temp1TotalTimeStreamSensSelec.append(endTimeStreamSensSelec-startTimeStreamSensSelec)
             
+            #Thresh
+            temp1coverageAreaThreshSensSelec.append(tempcoverageAreaThreshSensSelec/areaR*100.)
+            temp1areaWeightedAgeThreshSensSelec.append(tempareaWeightedAgeThreshSensSelec*1000.)
+            temp1Threshsubmodfunc.append(b_new_Thresh)
+            temp2Threshsubmodfunc.append((1./(ii+1))*np.sum(temp1Threshsubmodfunc))            
+            temp1TotalTimeThreshSensSelec.append(endTimeThreshSensSelec-startTimeThreshSensSelec-extraTimeThresh)
 
         coverageAreaGreedySensSelec.append(temp1coverageAreaGreedySensSelec)
         areaWeightedAgeGreedySensSelec.append(temp1areaWeightedAgeGreedySensSelec)
         Greedysubmodfunc.append(temp1Greedysubmodfunc)
         AvgGreedysubmodfunc.append(temp2Greedysubmodfunc)
+        GreedyTime.append(temp1TotalTimeGreedySensSelec)
         
         coverageAreaStreamSensSelec.append(temp1coverageAreaStreamSensSelec)
         areaWeightedAgeStreamSensSelec.append(temp1areaWeightedAgeStreamSensSelec)
         Streamsubmodfunc.append(temp1Streamsubmodfunc)        
         AvgStreamsubmodfunc.append(temp2Streamsubmodfunc)
+        StreamTime.append(temp1TotalTimeStreamSensSelec)
     
-
+        coverageAreaThreshSensSelec.append(temp1coverageAreaThreshSensSelec)
+        areaWeightedAgeThreshSensSelec.append(temp1areaWeightedAgeThreshSensSelec)
+        Threshsubmodfunc.append(temp1Threshsubmodfunc)        
+        AvgThreshsubmodfunc.append(temp2Threshsubmodfunc)
+        ThreshTime.append(temp1TotalTimeThreshSensSelec)
+        counterVec.append(counter)
 
     # Final averaged output
     coverageAreaGreedySensSelec = np.sum(coverageAreaGreedySensSelec,0)/numIter
     areaWeightedAgeGreedySensSelec = np.sum(areaWeightedAgeGreedySensSelec,0)/numIter
     Greedysubmodfunc = np.sum(Greedysubmodfunc,0)/numIter
     AvgGreedysubmodfunc = np.sum(AvgGreedysubmodfunc,0)/numIter
+    GreedyTime = np.sum(GreedyTime,0)/numIter
     
     coverageAreaStreamSensSelec = np.sum(coverageAreaStreamSensSelec,0)/numIter
     areaWeightedAgeStreamSensSelec = np.sum(areaWeightedAgeStreamSensSelec,0)/numIter
     Streamsubmodfunc = np.sum(Streamsubmodfunc,0)/numIter
     AvgStreamsubmodfunc = np.sum(AvgStreamsubmodfunc,0)/numIter
-    
+    StreamTime = np.sum(StreamTime,0)/numIter
+
+    coverageAreaThreshSensSelec = np.sum(coverageAreaThreshSensSelec,0)/numIter
+    areaWeightedAgeThreshSensSelec = np.sum(areaWeightedAgeThreshSensSelec,0)/numIter
+    Threshsubmodfunc = np.sum(Threshsubmodfunc,0)/numIter
+    AvgThreshsubmodfunc = np.sum(AvgThreshsubmodfunc,0)/numIter    
+    ThreshTime = np.sum(ThreshTime,0)/numIter
+    counterVec = np.sum(counterVec,0)
     
     #################  Plots  ######################################
     todayDate = date.today()
@@ -515,50 +593,69 @@ def main(T=int(5e2)):
     
     plt.clf()
     plt.plot(areaWeightedAgeGreedySensSelec, '.-',label='Greedy Sensor Selection')
-    plt.plot(areaWeightedAgeStreamSensSelec, '--',label='Stream Sensor Selection')
+    plt.plot(areaWeightedAgeStreamSensSelec, '*',label='Stream Sensor Selection')
+    plt.plot(areaWeightedAgeThreshSensSelec, '--',label='Thresh Sensor Selection')
      #plt.title('Area weighted age as a function of the number of selected sensors', fontsize=12)
     plt.legend()
     plt.grid()
       #plt.yscale('log')
     plt.xlabel('Window W', fontsize=12)
     plt.ylabel('Normalized average weighted age [msec]', fontsize=10)
-    plt.savefig(os.path.join(path,'Age' + '_N=' + str(N) + '_' + 'lam=' + str(lam)+'.eps'))
-    plt.savefig(os.path.join(path,'Age' + '_N=' + str(N) + '_' + 'lam=' + str(lam)+'.pdf'))
+    plt.savefig(os.path.join(path,'Age' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_thresh=' + str(thresh) + '_' + 'lam=' + str(lam)+'.eps'))
+    plt.savefig(os.path.join(path,'Age' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_thresh=' + str(thresh) + '_' + 'lam=' + str(lam)+'.pdf'))
       
     plt.clf()
     plt.plot(coverageAreaGreedySensSelec, '.-',label='Greedy Sensor Selection')
-    plt.plot(coverageAreaStreamSensSelec, '--',label='Stream Sensor Selection')
+    plt.plot(coverageAreaStreamSensSelec, '*',label='Stream Sensor Selection')
+    plt.plot(coverageAreaThreshSensSelec, '--',label='Tresh Sensor Selection')
      #plt.title('Coverage Area as a function of the number of selected sensors', fontsize=12)
     plt.legend()
     plt.grid()
     plt.xlabel('Window W', fontsize=12)
     plt.ylabel('Coverage [%]', fontsize=10)
-    plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(N) + '_' + 'lam=' + str(lam)+'.eps'))
-    plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(N) + '_' + 'lam=' + str(lam)+'.pdf'))
+    plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_' + 'thresh=' + str(thresh) + '_lam=' + str(lam)+'.eps'))
+    plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_' + 'thresh=' + str(thresh) + '_lam=' + str(lam)+'.pdf'))
 
 
     plt.clf()
     plt.plot(Greedysubmodfunc, '.-',label='Greedy Sensor Selection')
-    plt.plot(Streamsubmodfunc, '--',label='Stream Sensor Selection')
+    plt.plot(Streamsubmodfunc, '*',label='Stream Sensor Selection')
+    plt.plot(Threshsubmodfunc, '--',label='Thresh Sensor Selection')
      #plt.title('Coverage Area as a function of the number of selected sensors', fontsize=12)
     plt.legend()
     plt.grid()
     plt.xlabel('Window', fontsize=12)
     plt.ylabel('Submodular function value', fontsize=10)
-    plt.savefig(os.path.join(path,'SubmodFn' + '_N=' + str(N) + '_' + 'lam=' + str(lam)+'.eps'))
-    plt.savefig(os.path.join(path,'SubmodFn' + '_N=' + str(N) + '_' + 'lam=' + str(lam)+'.pdf'))
+    plt.savefig(os.path.join(path,'SubmodFn' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_' + '_thresh=' + str(thresh) + '_lam=' + str(lam)+'.eps'))
+    plt.savefig(os.path.join(path,'SubmodFn' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_' + '_thresh=' + str(thresh) + '_lam=' + str(lam)+'.pdf'))
 
 
     plt.clf()
     plt.plot(AvgGreedysubmodfunc, '.-',label='Greedy Sensor Selection')
-    plt.plot(AvgStreamsubmodfunc, '--',label='Stream Sensor Selection')
+    plt.plot(AvgStreamsubmodfunc, '*',label='Stream Sensor Selection')
+    plt.plot(AvgThreshsubmodfunc, '--',label='Thresh Sensor Selection')
      #plt.title('Coverage Area as a function of the number of selected sensors', fontsize=12)
     plt.legend()
     plt.grid()
     plt.xlabel('Window', fontsize=12)
     plt.ylabel('Submodular avg function value', fontsize=10)
-    plt.savefig(os.path.join(path,'AVGSubmodFn' + '_N=' + str(N) + '_' + 'lam=' + str(lam)+'.eps'))
-    plt.savefig(os.path.join(path,'AVGSubmodFn' + '_N=' + str(N) + '_' + 'lam=' + str(lam)+'.pdf'))
+    plt.savefig(os.path.join(path,'AVGSubmodFn' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_' + '_thresh=' + str(thresh) + '_lam=' + str(lam)+'.eps'))
+    plt.savefig(os.path.join(path,'AVGSubmodFn' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_' + '_thresh=' + str(thresh) + '_lam=' + str(lam)+'.pdf'))
+
+
+
+    plt.clf()
+    plt.plot(GreedyTime, '.-',label='Greedy Sensor Selection')
+    plt.plot(StreamTime, '*',label='Stream Sensor Selection')
+    plt.plot(ThreshTime, '--',label='Thresh Sensor Selection')
+     #plt.title('Coverage Area as a function of the number of selected sensors', fontsize=12)
+    plt.legend()
+    plt.grid()
+    plt.xlabel('Window', fontsize=12)
+    plt.ylabel('Average time [sec]', fontsize=10)
+    plt.savefig(os.path.join(path,'AlgoTime' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_' + '_thresh=' + str(thresh) + '_lam=' + str(lam)+'.eps'))
+    plt.savefig(os.path.join(path,'AlgoTime' + '_N=' + str(N) + '_k=' + str(k) + '_W=' + str(W) + '_' + '_thresh=' + str(thresh) + '_lam=' + str(lam)+'.pdf'))
+
 
 
     
