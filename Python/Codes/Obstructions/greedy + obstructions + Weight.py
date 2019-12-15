@@ -258,27 +258,53 @@ def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, 
     return obstructions
 
 
+def findneighborPixels(index, pixel,numPixelsperLength,numPixelsperWidth):
+    if index[0] == 0 and index[1] == 0:     # Upper-Left corner
+        neighbourPixels = np.array([pixel+1, pixel+numPixelsperLength, pixel+numPixelsperLength+1])
+    
+    elif index[0] == 0 and index[1] == numPixelsperLength-1: # Upper-Right corner
+        neighbourPixels = np.array([pixel-1, pixel+numPixelsperLength-1, pixel+numPixelsperLength])
+        
+    elif index[0] == numPixelsperWidth-1 and index[1] == 0: #Lower-Left corner
+        neighbourPixels = np.array([pixel-numPixelsperLength, pixel-numPixelsperLength+1, pixel+1])
+        
+    elif index[0] == numPixelsperWidth-1 and index[1] == numPixelsperLength-1: #Lower-right corner
+        neighbourPixels = np.array([pixel-numPixelsperLength-1, pixel-numPixelsperLength, pixel-1])
+        
+    elif index[0] == 0: #first row without the corners
+        neighbourPixels = np.array([pixel-1, pixel+1, pixel+numPixelsperLength-1, pixel+numPixelsperLength, pixel+numPixelsperLength+1])
+        
+    elif index[0] == numPixelsperWidth-1: #last row without the corners
+        neighbourPixels = np.array([pixel-1, pixel+1, pixel-numPixelsperLength-1, pixel-numPixelsperLength, pixel-numPixelsperLength+1])
+    
+    elif index[1] == 0: #first col without the corners
+        neighbourPixels = np.array([pixel-numPixelsperLength, pixel-numPixelsperLength+1, pixel+1, pixel+numPixelsperLength+1, pixel+numPixelsperLength])
+        
+    elif index[1] == numPixelsperLength-1: #last col without the corners    
+        neighbourPixels = np.array([pixel-numPixelsperLength, pixel-numPixelsperLength-1, pixel-1, pixel+numPixelsperLength-1, pixel+numPixelsperLength])
+        
+    else:
+        neighbourPixels = np.array([pixel-numPixelsperLength-1,pixel-numPixelsperLength,pixel-numPixelsperLength+1,
+                                    pixel - 1 ,       pixel + 1,
+                                    pixel + numPixelsperLength-1,pixel+numPixelsperLength,pixel+numPixelsperLength+1])    
+    return neighbourPixels
+
+
 def detectRegion(currentPixel,regionsPerCurrentSensor,labeledMatrixPixel,labeledPixels,numPixelsperLength,numPixelsperWidth):
     newRegionForCurrentPixel = 1
     regionID = 0
     
     currentPixelLabel = labeledPixels[currentPixel]
-    
+    index = np.where(labeledMatrixPixel == currentPixel)
     # Find the neighbour pixels of the current pixel(~): [1,2,3
                                                     #    4,~,5
                                                     #    6,7,8]
 
-    neighbourPixels = np.array([currentPixelLabel-numPixelsperLength-1,currentPixelLabel-numPixelsperLength,currentPixelLabel-numPixelsperLength+1,
-                                currentPixelLabel-1 ,       currentPixelLabel+1,
-                                currentPixelLabel+numPixelsperLength-1,currentPixelLabel+numPixelsperLength,currentPixelLabel+numPixelsperLength+1])
+    neighbourPixels = findneighborPixels(index, currentPixelLabel,numPixelsperLength,numPixelsperWidth)
     
-    
-    # Remove the negative indices (for the pixels on the borders of the box)
-    new_neighbourPixels = neighbourPixels[neighbourPixels >= 0]
-    
-    for nn in range(len(new_neighbourPixels)):
+    for nn in range(len(neighbourPixels)):
         for ii in range(len(regionsPerCurrentSensor)):
-            if new_neighbourPixels[nn] in regionsPerCurrentSensor[ii]:
+            if neighbourPixels[nn] in regionsPerCurrentSensor[ii]:
                 regionID = ii
                 newRegionForCurrentPixel = 0
                 break
@@ -351,6 +377,46 @@ def weightPixels(labeledMatrixPixel,weightedRegionsPerSensor,sortedObstructedPix
 
 
 
+
+
+
+def divideMapintoRegions(weightedMap, labeledMatrixPixel, labeledPixels, numPixelsperLength, numPixelsperWidth):
+    regionID = []
+    IDMap = -1*np.ones(np.shape(labeledMatrixPixel))
+    
+    ID = -1
+    for pixel in range(len(labeledPixels)):
+        index = np.where(labeledMatrixPixel == pixel)
+        # Find the neighbour pixels of the current pixel(~): [1,2,3
+                                                        #    4,~,5
+                                                        #    6,7,8]
+    
+        neighbourPixels = findneighborPixels(index, pixel,numPixelsperLength,numPixelsperWidth)
+
+        
+        
+        # Remove the negative indices (for the pixels on the borders of the box)
+        #new_neighbourPixels = neighbourPixels[neighbourPixels >= 0]
+        
+        
+        for nn in range(len(neighbourPixels)):
+            check = 0
+            index_neighbour = np.where(labeledMatrixPixel == neighbourPixels[nn])
+            if  weightedMap[index[0][0]][index[1][0]] == weightedMap[index_neighbour[0][0]][index_neighbour[1][0]]:
+                if IDMap[index_neighbour[0][0]][index_neighbour[1][0]] >= 0:
+                    IDMap[index[0][0]][index[1][0]] = IDMap[index_neighbour[0][0]][index_neighbour[1][0]]
+                    temp_ID = int(IDMap[index[0][0]][index[1][0]])
+                    regionID[temp_ID] = regionID[temp_ID] + (pixel,)
+                    check = 1
+                    break
+        if check == 0:
+            ID = ID + 1 #new ID
+            IDMap[index[0][0]][index[1][0]] = ID
+            regionID.append(())
+            regionID[-1] = (pixel,)
+    
+    
+    return regionID
 
 #def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,labeledPixels,labeledMatrixPixel,N,carDimensions,boxDim,obstructedLabeledPixelsperSensor):
 #    tempPartitionsPixels = np.zeros(2**N-1)
@@ -594,7 +660,7 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
 
 def main(T=int(5e2)): 
     scalingFactor = 1
-    N = np.arange(6,7,1) # number of sensors
+    N = np.arange(5,6,1) # number of sensors
     lam = 1.
     sensorRadius = np.array(5/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
@@ -611,8 +677,8 @@ def main(T=int(5e2)):
     boxDim = np.array([rectangleLength,rectangleWidth])
     areaR = rectangleLength*rectangleWidth*scalingFactor**2
     
-    numSquaresperLength = int(rectangleLength*10)
-    numSquaresperWidth = int(rectangleWidth*10)
+    numSquaresperLength = int(rectangleLength)
+    numSquaresperWidth = int(rectangleWidth)
     
     pixelLength = rectangleLength/numSquaresperLength
     pixelWidth = rectangleWidth/numSquaresperWidth
@@ -623,14 +689,14 @@ def main(T=int(5e2)):
     coordPixels = generatePixelsCenters(xPosCenterPixel1, yPosCenterPixel1, pixelLength, pixelWidth, numSquaresperLength, numSquaresperWidth)
     labeledPixels = np.arange(0,numSquaresperLength*numSquaresperWidth)
     labeledMatrixPixel = np.zeros((numSquaresperWidth,numSquaresperLength))
-    
+        
     countPixel = 0
     for ww in range(numSquaresperWidth):
         for ll in range(numSquaresperLength):
             labeledMatrixPixel[ww][ll] = countPixel
             countPixel += 1
     
-    a = np.where(labeledMatrixPixel == 403)
+    
     carLength = 1
     carWidth = 1
     carLengthScaled = carLength/scalingFactor
@@ -713,7 +779,7 @@ def main(T=int(5e2)):
             
             
              # Step: Divide the map into regions based on different weights
-             pixelatedRegions, RegionID = divideMapintoRegions(weightedMap, labeledMatrixPixel)
+             pixelatedRegions, regionID = divideMapintoRegions(weightedMap, labeledMatrixPixel, labeledPixels, numSquaresperLength, numSquaresperWidth)
             
             
             
