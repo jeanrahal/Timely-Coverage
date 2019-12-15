@@ -1,14 +1,15 @@
 import numpy as np
-import copy
 import matplotlib.pyplot as plt
-from tqdm import tqdm 
+import random
+import copy
+import time
 import itertools 
 from scipy.integrate import quad
 from scipy.spatial import KDTree
 from scipy.optimize import brentq
-
-
-# Function that computes the age of the region of intersection 
+import os
+from datetime import date
+from numba import jit, cuda 
     
 def return_zj(selectRates,d):
     
@@ -71,8 +72,7 @@ def gradient_obj_fn_MinAge(N, ratePerSensor, numSelectedSensors, setofSelectedSe
                     temp1 = comp1(np.delete(selectedRates,s),d,selectedRates[s])
                     result = quad(temp1, d, d+1./max_rate)
                     grad_MinAge[idx] = grad_MinAge[idx] + (result[0])*selectedPartitionsArea[p]/np.sum(selectedPartitionsArea)
-                       
-       
+                             
     return grad_MinAge
     
 
@@ -90,7 +90,6 @@ def frank_wolfe(N,ratePerSensor, numSelectedSensors, setofSelectedSensors, allPo
     return ratePerSensor
 
 
-
 def descent(N,update, d, numSelectedSensors, setofSelectedSensors, allPossibleSets, selectedPartitionsArea, capacity, T=int(250)):
     ratePerSensor =  1.*np.ones(int(numSelectedSensors))
     obj_fn = []
@@ -98,14 +97,13 @@ def descent(N,update, d, numSelectedSensors, setofSelectedSensors, allPossibleSe
     
     for t in range(T):
         # update A (either subgradient or frank-wolfe)
-        ratePerSensor = update(N,ratePerSensor, numSelectedSensors, setofSelectedSensors, allPossibleSets, selectedPartitionsArea, t, capacity,d)
+        ratePerSensor = update(N,ratePerSensor, numSelectedSensors, setofSelectedSensors, allPossibleSets, selectedPartitionsArea, t, capacity, d)
 
         # record error and l1 norm
         if (t % 1 == 0) or (t == T - 1):
             l1.append(np.sum(abs(ratePerSensor)))
             obj_fn.append(objective_function_MinAge(N,d, ratePerSensor, numSelectedSensors, setofSelectedSensors, allPossibleSets, selectedPartitionsArea))
             #assert not np.isnan(obj_fn[-1]) 
-
     
     return ratePerSensor, obj_fn, l1
 
@@ -147,50 +145,7 @@ def pixelisInCircle(sensor,sensorRadius,pixel,coordPixels,coordSensors):
 def findsubsets(s, n): 
     return list(itertools.combinations(s, n)) 
 
-
-
-def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, carDimensions, boxDim):
-    obstructions = []
-    
-    ''' 
-    Find the coord of obstructed pixels for each sensor
-    
-    input: coord Pixels, coord sensors, sensor radius, # of sensors, car dimensions: W x L
-    output: list of lists, each list is the set of obstructed pixels per sensor
-    '''
-    
-    carsCoords = findCarCoords(coordSensors,carDimensions, boxDim, N)
-    
-    for sensor in range(N):
-        obstructions.append([])
-        for pixel in range(len(coordPixels)):
-            # Step 1: check if the selected pixel is first within the range of observability of the selected sensor
-            if pixelisInCircle(sensor,sensorRadius,pixel,coordPixels,coordSensors) == 1:
-                # Step 2: check if the pixel is obstructed
-                for otherSensor in range(N):
-                    if otherSensor != sensor:
-                        # Compute all the slopes between the selected sensor and other sensors
-                        slope = []
-                        for ii in range(len(carsCoords[otherSensor])):
-                            slope.append((coordSensors[sensor][1]-carsCoords[otherSensor][ii][1])/(coordSensors[sensor][0]-carsCoords[otherSensor][ii][0]))
-                        
-                        pickedSlopes = np.array([min(slope),max(slope)])
-                        distSensors = np.linalg.norm(coordSensors[sensor]-coordSensors[otherSensor])
-                        distSensorToPixel = np.linalg.norm(coordSensors[sensor]-coordPixels[pixel])
-                        distPixelTootherSens = np.linalg.norm(coordPixels[pixel]-coordSensors[otherSensor])
-                        slopeSensorPixel = (coordSensors[sensor][1]-coordPixels[pixel][1])/(coordSensors[sensor][0]-coordPixels[pixel][0])
-                        
-                        if distSensorToPixel > distSensors and distSensorToPixel > distPixelTootherSens and slopeSensorPixel >= pickedSlopes[0] and slopeSensorPixel <= pickedSlopes[1]:
-                            obstructions[sensor].append(labeledPixels[pixel])
-                            break
-    
-    #plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstructions, boxDim)
-                        
-    return obstructions
-
-
-
-def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,labeledPixels,N,carDimensions,boxDim):
+def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,N):
     tempPartitionsPixels = np.zeros(2**N-1)
     partitionsPixels = np.zeros(2**N-1)
     temp = np.zeros(2**N-1)
@@ -203,12 +158,11 @@ def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensor
         for jj in range(len(hello)):
             allPossibleSets.append(list(hello[jj]))
         
-    obstructions = findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, carDimensions, boxDim)
-   
+    
     
     for pixel in range(len(coordPixels)):
         for sensor in range(N):
-            if pixelisInCircle(sensor,sensorRadius,pixel,coordPixels,coordSensors) == 1 and labeledPixels[pixel] not in obstructions[sensor]:
+            if pixelisInCircle(sensor,sensorRadius,pixel,coordPixels,coordSensors) == 1:
                tempPartitionsPixels[sensor] = tempPartitionsPixels[sensor] + 1 
         
         if np.sum(tempPartitionsPixels) > 1:
@@ -227,6 +181,23 @@ def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensor
         temp1 = []
         
     return partitionsPixels*pixelLength*pixelWidth, allPossibleSets
+
+
+
+def  baselineModel(ratePerSensor , d, partitionsArea , allPossibleSets, scalingFactor):
+    areaWeightedAge = 0.
+    coverageArea = np.sum(partitionsArea)
+    AgePerPartition = []
+    for ii in range(len(partitionsArea)):
+        n = len(allPossibleSets[ii])
+        tempAge = d + (1./(n+1.))*(1/ratePerSensor) 
+        #tempAge = (n+2.)/(n+1.)*(1/ratePerSensor)
+        AgePerPartition.append(tempAge)
+    
+    areaWeightedAge = np.sum(partitionsArea*AgePerPartition)/coverageArea
+    
+    return coverageArea, areaWeightedAge
+
 
 
 def compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors ,ratePerSensor, currSensor, allPossibleSets, lam):
@@ -254,9 +225,12 @@ def compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors ,rate
     for ii in range(len(partitionsArea)):
         n = tempP[ii]
         if n!=0:
-            tempAge = d + (1./(n+1.))*(1/ratePerSensor) 
+            tempAge = d + (1./(n+1.))*(1./ratePerSensor) 
             #tempAge = (n+2.)/(n+1.)*(1./ratePerSensor)
-            AgePerPartition.append(tempAge)
+            if np.isnan(tempAge):
+               AgePerPartition.append(0.)
+            else:
+               AgePerPartition.append(tempAge)
             coveredArea.append(newPartitionArea[ii])
         else:
             AgePerPartition.append(0.)
@@ -270,15 +244,21 @@ def compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors ,rate
     a_empty = lam*np.sum(partitionsArea)
     b = a_empty-a
     
-    return b,totalCoveredArea,areaWeightedAge,selectedPartitionsArea
+    return b, totalCoveredArea, areaWeightedAge, selectedPartitionsArea
 
-
-def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam, numSelectedSensors, thresh = 2.):
+#@jit(target ="cuda")  
+def SensSelecModel(N, k, d, capacity, mu, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam, thresh = 2.):
     areaWeightedAge = 0.
     coverageArea = np.sum(partitionsArea)
+    numSelectedSensors = N
     setofSelectedSensors = []
     setofSensors = np.arange(1,N+1,1)
-      
+    
+    #k = 4.
+    #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
+    if int(N)>int(k):
+       numSelectedSensors = (k) 
+    
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
     lam = d*(1.+2./3.*numSelectedSensors)
     
@@ -290,7 +270,7 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
         for jj in range(N):
             if jj+1 not in setofSelectedSensors:
                 b_new, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, ratePerSensor, jj+1, allPossibleSets, lam)
-                if np.abs(b_new - b_old) >= new_max:
+                if np.abs(b_new - b_old) > new_max:
                     new_max = (b_new - b_old)
                     temp_b_old = b_new
                     selectedSensor = jj+1
@@ -302,30 +282,87 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
     
     return coverageArea , areaWeightedAge/(coverageArea) , setofSelectedSensors
 
-
-def main(T=int(5e2)): 
-    scalingFactor = 50
-    N = 8 # number of sensors
-    k = 4 # number of selected sensors
-    
+#@jit(target ="cuda")  
+def AgeMinModel(N, k, d, mu, capacity , partitionsArea , allPossibleSets, rectangleLength , rectangleWidth , sensorRadius, scalingFactor , T, lam, thresh = 2.):
+    areaWeightedAge = 0.
+    coverageArea = np.sum(partitionsArea)
     numSelectedSensors = N
+    setofSelectedSensors = []
+    setofSensors = np.arange(1,N+1,1)
+    
+    #k = 4.
+    #np.ceil((rectangleLength/sensorRadius)*1.)
     if int(N)>int(k):
        numSelectedSensors = int(k) 
     
-    sensorRadius = 100/scalingFactor #coverage radius per sensor
+    ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    #lam = d*(1.+2./3.*numSelectedSensors)
+    
+    new_max = 0.
+    temp_b_old = 0.
+    for ii in range(int(numSelectedSensors)):
+        b_old = temp_b_old
+        new_max = 0.
+        for jj in range(N):
+            if jj+1 not in setofSelectedSensors:
+                b_new, tempcoverageArea , tempareaWeightedAge,selectedPartitionsArea = compute_b(N, d ,mu, partitionsArea, setofSelectedSensors, setofSensors ,ratePerSensor, jj+1, allPossibleSets, lam)
+                if np.abs(b_new - b_old) >= new_max:
+                    new_max = (b_new - b_old)
+                    temp_b_old = b_new
+                    selectedSensor = jj+1
+                    coverageArea = tempcoverageArea
+                    areaWeightedAge = tempareaWeightedAge
+        setofSelectedSensors.append(selectedSensor)
+                
+    setofSelectedSensors = np.sort(setofSelectedSensors)
+    
+    
+    
+    newallPossibleSets = []
+    
+    for ii in range(1,int(numSelectedSensors)+1):
+        hello = findsubsets(setofSelectedSensors,ii) 
+        #hello1 = (np.asarray(hello))
+        for jj in range(len(hello)):
+            newallPossibleSets.append(list(hello[jj]))
+    
+    newselectedPartitionsArea = np.zeros(2**(numSelectedSensors)-1)
+        
+    for ii in range(len(allPossibleSets)):
+        temp = []
+        for jj in range(len(allPossibleSets[ii])):
+            if allPossibleSets[ii][jj] in setofSelectedSensors:
+                temp.append(allPossibleSets[ii][jj])
+        if temp:
+            #temp = np.sort(temp)
+            idx = newallPossibleSets.index(temp)
+            newselectedPartitionsArea[idx] = newselectedPartitionsArea[idx] + partitionsArea[ii]    
+            
+    # Compute new rate allocation and new ageWeightedArea
+    rate_fw_agemin,  obj_fn, l1_fw_agemin = descent(N,frank_wolfe, d, numSelectedSensors, setofSelectedSensors, newallPossibleSets, np.array(newselectedPartitionsArea), capacity/(mu*d), T=T)
+    
+    return coverageArea , obj_fn[-1] , setofSelectedSensors
+
+
+
+
+
+def main(T=int(5e2)): 
+    scalingFactor = 50
+    N = np.arange(10,11,1) # number of sensors
+    k = np.arange(2,11,1)
+    lam = 1.
+    sensorRadius = np.array(100/scalingFactor)#coverage radius per sensor
+    #sensorRadius = []
+    #sensorRadius = np.array([1.,1.,1.,1.,1.,2.,2.,2.,2.,2.])    
     capacity = 1.
     d = 4.2e-3 #transmission delay
     mu = 1. #packet size
     
-    lam_min = d*(1.+2./3.*numSelectedSensors)
-    #lam = np.arange(lam_min,2.*lam_min,0.00005)
-    lam = np.arange(lam_min,1.,0.005)
-    
-    rectangleLength = 1000/scalingFactor
+    rectangleLength = 500/scalingFactor
     rectangleWidth = 10/scalingFactor
-    boxDim = np.array([rectangleLength,rectangleWidth])
     areaR = rectangleLength*rectangleWidth*scalingFactor**2
-
+    
     numSquaresperLength = int(rectangleLength*10)
     numSquaresperWidth = int(rectangleWidth*10)
     
@@ -336,55 +373,102 @@ def main(T=int(5e2)):
     yPosCenterPixel1 = pixelWidth/2
     
     coordPixels = generatePixelsCenters(xPosCenterPixel1, yPosCenterPixel1, pixelLength, pixelWidth, numSquaresperLength, numSquaresperWidth)
-    labeledPixels = np.arange(0,numSquaresperLength*numSquaresperWidth)
-    carDimensions = np.array([5,3])/scalingFactor # Length X Width
 
+
+    coverageAreaBaseline = []
+    areaWeightedAgeBaseline = []
     coverageAreaSensSelec = []
     areaWeightedAgeSensSelec = []
     selectedSensorsSensSelec = []
+    coverageAreaAgeMin = []
+    areaWeightedAgeAgeMin =[]
+    selectedSensorsAgeMin =[]
 
     numIter = 15
-
-    for ii in tqdm(range(len(lam))):
+    
+    for ii in range(len(k)):
+         temp1coverageAreaBaseline = []
+         temp1areaWeightedAgeBaseline = []
          temp1coverageAreaSensSelec = []
          temp1areaWeightedAgeSensSelec = []
          temp1selectedSensorsSensSelec = []
+         temp1coverageAreaAgeMin = []
+         temp1areaWeightedAgeAgeMin =[]
+         temp1selectedSensorsAgeMin =[]
          
          for jj in range(numIter):
-             xcoordSensors = 0 + np.random.rand(N,1)*(rectangleLength-0) 
-             ycoordSensors = 0 + np.random.rand(N,1)*(rectangleWidth-0)
+             xcoordSensors = 0 + np.random.rand(N[0],1)*(rectangleLength-0) 
+             ycoordSensors = 0 + np.random.rand(N[0],1)*(rectangleWidth-0)
              coordSensors = np.concatenate((xcoordSensors,ycoordSensors),axis=1)
+             #coordSensors  = np.array([[3.,0.1],[3.,0.1],[3.,0.1],[3.,0.1],[7.,0.1],[7.,0.1],[7.,0.1],[7.,0.1]])
+             partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,N[0])
              
-             partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,labeledPixels,N,carDimensions,boxDim)
-
-             tempcoverageAreaSensSelec , tempareaWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N, d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor, sensorRadius*scalingFactor, scalingFactor, lam[ii], numSelectedSensors, thresh = 2.)
+             tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[0]*mu*d), d, partitionsArea*scalingFactor**2 , allPossibleSets, scalingFactor)
+             tempcoverageAreaSensSelec , tempareaWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N[0], k[ii], d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam ,thresh = 2.)
+             tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[0], k[ii], d, mu, capacity , partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor , rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, T, lam ,thresh = 2.)
+             
+     
+             temp1coverageAreaBaseline.append(tempcoverageAreaBaseline)
+             temp1areaWeightedAgeBaseline.append(tempareaWeightedAgeBaseline)
              
              temp1coverageAreaSensSelec.append(tempcoverageAreaSensSelec)
              temp1areaWeightedAgeSensSelec.append(tempareaWeightedAgeSensSelec)
              temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
      
+         
+     
+             temp1coverageAreaAgeMin.append(tempcoverageAreaAgeMin)
+             temp1areaWeightedAgeAgeMin.append(tempareaWeightedAgeAgeMin)
+             temp1selectedSensorsAgeMin.append(len(tempselectedSensorsAgeMin))
+     
+             
+         coverageAreaBaseline.append(np.sum(temp1coverageAreaBaseline)/numIter/areaR*100.)
+         areaWeightedAgeBaseline.append(np.sum(temp1areaWeightedAgeBaseline)/numIter*1000.)
           
-         coverageAreaSensSelec.append(np.sum(temp1coverageAreaSensSelec)/numIter/areaR*100)
-         areaWeightedAgeSensSelec.append(np.sum(temp1areaWeightedAgeSensSelec)/numIter*1000)
+         coverageAreaSensSelec.append(np.sum(temp1coverageAreaSensSelec)/numIter/areaR*100.)
+         areaWeightedAgeSensSelec.append(np.sum(temp1areaWeightedAgeSensSelec)/numIter*1000.)
          selectedSensorsSensSelec.append(np.sum(temp1selectedSensorsSensSelec)/numIter)
+     
+         coverageAreaAgeMin.append(np.sum(temp1coverageAreaAgeMin)/numIter/areaR*100.)
+         areaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter*1000.)
+         selectedSensorsAgeMin.append(np.sum(temp1selectedSensorsAgeMin)/numIter)        
+    
+    
+    
+    
+    #################  Plots  ######################################
+    todayDate = date.today()
+
+    path = os.getcwd() + '\Figures' + '\\' + str(todayDate)
+    
+    if not os.path.exists(path):
+        os.mkdir(path)
     
     
     plt.clf()
-    plt.scatter(coverageAreaSensSelec, areaWeightedAgeSensSelec, label='Sensor Selection')
+    plt.plot(k , areaWeightedAgeBaseline, '--', label='Baseline')
+    plt.plot(k , areaWeightedAgeSensSelec, '.-',label='Sensor Selection')
+    plt.plot(k , areaWeightedAgeAgeMin, label='Age Minimization')
+    plt.title('Area weighted age as a function of the number of selected sensors', fontsize=12)
     plt.legend()
     plt.grid()
-    plt.ylim(min(areaWeightedAgeSensSelec), max(areaWeightedAgeSensSelec))
-    #plt.yscale('log')
-    plt.xlabel('Coverage [%]', fontsize=12)
-    plt.ylabel('Normalized average area weighted age (msec)', fontsize=12)
-    plt.savefig('newAgevsCo2.eps')
-    plt.savefig('newAgevsCo2.pdf')
-
-
-
-
-
-
+      #plt.yscale('log')
+    plt.xlabel('Number of selected sensors k', fontsize=12)
+    plt.ylabel('Normalized average weighted age [msec]', fontsize=10)
+    plt.savefig(os.path.join(path,'Age' + '_k=' + str(min(k)) +'_'+ str(max(k)) + '_' + 'lam=' + 'lam_min' + 'N=' + str(N[0]) + '.eps'))
+    plt.savefig(os.path.join(path,'Age' + '_k=' + str(min(k)) +'_'+ str(max(k)) + '_' + 'lam=' + 'lam_min' + 'N=' + str(N[0]) +'.pdf'))
+      
+    plt.clf()
+    plt.plot(k , coverageAreaBaseline, '--', label='Baseline')
+    plt.plot(k , coverageAreaSensSelec, '.-',label='Sensor Selection')
+    plt.plot(k , coverageAreaAgeMin, label='Age Minimization')
+    plt.title('Coverage Area as a function of the number of selected sensors', fontsize=12)
+    plt.legend()
+    plt.grid()
+    plt.xlabel('Number of selected sensors k', fontsize=12)
+    plt.ylabel('Coverage [%]', fontsize=10)
+    plt.savefig(os.path.join(path,'Coverage' + '_k=' + str(min(k)) +'_'+ str(min(k)) + '_' + 'lam=' + 'lam_min' + 'N=' + str(N[0]) +'.eps'))
+    plt.savefig(os.path.join(path,'Coverage' + '_k=' + str(min(k)) +'_'+ str(min(k)) + '_' + 'lam=' + 'lam_min' + 'N=' + str(N[0]) +'.pdf'))
 
     
 if __name__ == "__main__":

@@ -270,7 +270,7 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
         for jj in range(N):
             if jj+1 not in setofSelectedSensors:
                 b_new, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, ratePerSensor, jj+1, allPossibleSets, lam)
-                if np.abs(b_new - b_old) >= new_max:
+                if np.abs(b_new - b_old) > new_max:
                     new_max = (b_new - b_old)
                     temp_b_old = b_new
                     selectedSensor = jj+1
@@ -349,13 +349,13 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
 
 def main(T=int(5e2)): 
     scalingFactor = 50
-    N = np.arange(8,14,1) # number of sensors
+    N = np.arange(8,9,1) # number of sensors
     lam = 1.
     sensorRadius = np.array(100/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
     #sensorRadius = np.array([1.,1.,1.,1.,1.,2.,2.,2.,2.,2.])    
     capacity = 1.
-    d = 0.5e-3 #transmission delay
+    d = 4.2e-3 #transmission delay
     mu = 1. #packet size
     
     rectangleLength = 500/scalingFactor
@@ -383,7 +383,7 @@ def main(T=int(5e2)):
     areaWeightedAgeAgeMin =[]
     selectedSensorsAgeMin =[]
 
-    numIter = 20
+    numIter = 1
     
     for ii in range(len(N)):
          temp1coverageAreaBaseline = []
@@ -399,7 +399,7 @@ def main(T=int(5e2)):
              xcoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleLength-0) 
              ycoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleWidth-0)
              coordSensors = np.concatenate((xcoordSensors,ycoordSensors),axis=1)
-             #coordSensors  = np.array([[0.346256,0.794008],[17.6222,1.67842],[1.60685,1.52488],[17.6952,0.376898],[14.8532,1.3532],[5.21618,1.56915],[17.8326,0.501913],[13.8915,0.141149],[0.0616458,0.807074],[12.3948,0.727091]])
+             #coordSensors  = np.array([[3.,0.1],[3.,0.1],[3.,0.1],[3.,0.1],[7.,0.1],[7.,0.1],[7.,0.1],[7.,0.1]])
              partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,N[ii])
              
              #tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[ii]*mu*d), d, partitionsArea*scalingFactor**2 , allPossibleSets, scalingFactor)
@@ -454,8 +454,8 @@ def main(T=int(5e2)):
       #plt.yscale('log')
     plt.xlabel('Number of available sensors N', fontsize=12)
     plt.ylabel('Normalized average weighted age [msec]', fontsize=10)
-    plt.savefig(os.path.join(path,'Age' + '_N=' + str(min(N)) +'_'+ str(min(N)) + '_' + 'lam=' + 'lam_min' +'.eps'))
-    plt.savefig(os.path.join(path,'Age' + '_N=' + str(min(N)) +'_'+ str(min(N)) + '_' + 'lam=' + 'lam_min' +'.pdf'))
+    plt.savefig(os.path.join(path,'Age' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' +'.eps'))
+    plt.savefig(os.path.join(path,'Age' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' +'.pdf'))
       
     plt.clf()
     #plt.plot(N , coverageAreaBaseline, '--', label='Baseline')
@@ -466,8 +466,8 @@ def main(T=int(5e2)):
     plt.grid()
     plt.xlabel('Number of available sensors N', fontsize=12)
     plt.ylabel('Coverage [%]', fontsize=10)
-    plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(min(N)) +'_'+ str(min(N)) + '_' + 'lam=' + 'lam_min' +'.eps'))
-    plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(min(N)) +'_'+ str(min(N)) + '_' + 'lam=' + 'lam_min' +'.pdf'))
+    plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' +'.eps'))
+    plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' +'.pdf'))
 
     
 if __name__ == "__main__":

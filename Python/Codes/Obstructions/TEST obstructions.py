@@ -166,10 +166,10 @@ def findCarCoords(coordSensors,carDimensions, boxDim, N):
     carsCoords = []
     
     for car in range(N):
-        a = coordSensors[car][0]+carDimensions[0]/2
-        b = coordSensors[car][1]+carDimensions[1]/2
-        c = coordSensors[car][1]-carDimensions[1]/2
-        d = coordSensors[car][0]-carDimensions[0]/2
+        a = coordSensors[0][car][0]+carDimensions[0]/2
+        b = coordSensors[0][car][1]+carDimensions[1]/2
+        c = coordSensors[0][car][1]-carDimensions[1]/2
+        d = coordSensors[0][car][0]-carDimensions[0]/2
         
         carsCoords.append([[a if a<= boxDim[0] else boxDim[0], b if b<= boxDim[1] else boxDim[1]],
                            [a if a<= boxDim[0] else boxDim[0], c if c>= 0 else 0],
@@ -181,8 +181,8 @@ def findCarCoords(coordSensors,carDimensions, boxDim, N):
 
 def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstructions, boxDim):
     
-    pixelLength = 0.01
-    pixelWidth = 0.01
+    pixelLength = 1
+    pixelWidth = 1
     
     plt.clf()
     fig,ax = plt.subplots(1)
@@ -200,13 +200,13 @@ def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstr
         ax.add_patch(rect)
     
     for sensor in range(len(coordSensors)):
-        rect = patches.Rectangle((carsCoords[sensor][-1][0],carsCoords[sensor][-1][1]),carDimensions[0],carDimensions[1],linewidth=1,edgecolor=edgecol[sensor],facecolor='none')
+        rect = patches.Rectangle((carsCoords[sensor][-1][1],carsCoords[sensor][-1][0]),carDimensions[1],carDimensions[0],linewidth=1,edgecolor=edgecol[sensor],facecolor='none')
         ax.add_patch(rect)
-        circle = plt.Circle((coordSensors[sensor][0], coordSensors[sensor][1]), 2, edgecolor=edgecol[sensor],facecolor='none')
+        circle = plt.Circle((coordSensors[sensor][1],coordSensors[sensor][0]), 5, edgecolor=edgecol[sensor],facecolor='none')
         ax.add_patch(circle)
         for obs in range(len(obstructions[sensor])):
             temp = obstructions[sensor][obs]
-            rect = patches.Rectangle(((coordPixels[temp][0]-pixelLength/2),(coordPixels[temp][1]-pixelWidth/2)),pixelLength,pixelWidth,linewidth=1,edgecolor=edgecol[sensor],facecolor=facecol[sensor])
+            rect = patches.Rectangle(((coordPixels[temp][1]-pixelWidth/2),(coordPixels[temp][0]-pixelLength/2)),pixelLength,pixelWidth,linewidth=1,edgecolor=edgecol[sensor],facecolor=facecol[sensor])
             ax.add_patch(rect)
             
             
@@ -217,7 +217,7 @@ def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstr
     return None
 
 
-def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, carDimensions, boxDim, plot=0):
+def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, carDimensions, boxDim, plot):
     obstructions = []
     
     ''' 
@@ -228,6 +228,7 @@ def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, 
     '''
     
     carsCoords = findCarCoords(coordSensors,carDimensions, boxDim, N)
+    coordSensors = coordSensors[0]
     
     for sensor in range(N):
         obstructions.append([])
@@ -252,8 +253,8 @@ def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, 
                             obstructions[sensor].append(labeledPixels[pixel])
                             break
     
-#    if plot == 1:
-#        plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstructions, boxDim)
+    if plot == 1:
+        plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstructions, boxDim)
                         
     return obstructions
 
@@ -553,7 +554,7 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
 
 def main(T=int(5e2)): 
     scalingFactor = 1
-    N = np.arange(3,6,1) # number of sensors
+    N = np.arange(3,4,1) # number of sensors
     lam = 1.
     sensorRadius = np.array(5/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
@@ -570,8 +571,8 @@ def main(T=int(5e2)):
     boxDim = np.array([rectangleLength,rectangleWidth])
     areaR = rectangleLength*rectangleWidth*scalingFactor**2
     
-    numSquaresperLength = int(rectangleLength*10)
-    numSquaresperWidth = int(rectangleWidth*10)
+    numSquaresperLength = int(rectangleLength)
+    numSquaresperWidth = int(rectangleWidth)
     
     pixelLength = rectangleLength/numSquaresperLength
     pixelWidth = rectangleWidth/numSquaresperWidth
@@ -617,93 +618,54 @@ def main(T=int(5e2)):
          temp1areaWeightedAgeAgeMin =[]
          temp1selectedSensorsAgeMin =[]
          
-         for jj in range(numIter):
-             #####  We check if the newly generated vehicle doesn't overlap with any previously generated vehicle  ############ 
-             nn = 0
-             coordSensors = []
-             while nn < N[ii]:
-                 check = 0
-                 temp_x = np.random.rand(1,1)*(rectangleLength-0) 
-                 temp_y = np.random.rand(1,1)*(rectangleWidth-0)
-                 
-                 temp_newSensor = np.concatenate((temp_x,temp_y),axis=1)
-                 # Check first that the new sensor's coordinates have not been previously selected
-                 if temp_newSensor not in np.array(coordSensors):
-                    # Check that the dist between the new sensor and other sensors is at least: sqrt(L^2+W^2)
-                    if not list(coordSensors):
-                        coordSensors = np.concatenate((temp_x,temp_y),axis=1)
-                        nn += 1
-                        coordSensors = list(coordSensors)
-                    else:
-                        for mm in range(len(coordSensors)):
-                            if np.linalg.norm(temp_newSensor - coordSensors[mm]) < np.sqrt((carLengthScaled)**2+(carWidthScaled)**2):
-                                check = 1
-                                break                        
-                        if check == 0:
-                            coordSensors.append(np.concatenate((temp_x,temp_y),axis=1)[0])   
-                            nn += 1
-                 
+         coordSensors = []
+
+         s1 = np.array([2.5, 2.5])
+         s2 = np.array([3.5, 3.5])
+         s3 = np.array([1.5, 3.5])
              
+         coordSensors.append((s1,s2,s3))                        
              
-             
-#             xcoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleLength-0) 
-#             ycoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleWidth-0)
-#             coordSensors = np.concatenate((xcoordSensors,ycoordSensors),axis=1)             
-             
-             #######################################################################################################################
-             # Step 1: Find the labels of the obstructed pixels per sensor, for all available sensors in the network   
-             obstructedLabeledPixelsperSensor = findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N[ii], carDimensions, boxDim, plot)
-                
-             # Step 2: Sort the obstructed pixels per sensor into different regions
-             sortedObstructedPixelsperSensor = sortObstructedPixelPerSensor(labeledMatrixPixel,labeledPixels,obstructedLabeledPixelsperSensor,numSquaresperLength,numSquaresperWidth,N[ii])
-                
-             # Step 3: Put weight on pixels depending on region area
-             weightedRegionsPerSensor = putWeightonRegions(sortedObstructedPixelsperSensor,N[ii])
-             
-             # Weight the pixels by summing the weights we got from the previous function
-             weightedMap = weightPixels(labeledMatrixPixel,weightedRegionsPerSensor,sortedObstructedPixelsperSensor,N[ii])
-             
-             # Plot the heat map
-             if plot == 1:
-                 plt.figure()
-                 ax = sns.heatmap(weightedMap)
-                 plt.savefig(os.path.join(path, 'heatmap.pdf'))
-             # Step : Compute the different partitions areas
-             partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedLabeledPixelsperSensor)
-                 
-             tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[ii]*mu*d), d, partitionsArea*scalingFactor**2 , allPossibleSets, scalingFactor)
-             tempcoverageAreaSensSelec , tempareaWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N[ii], d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam ,thresh = 2.)
-             tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, mu, capacity , partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor , rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, T, lam ,thresh = 2.)
-             
-     
-             temp1coverageAreaBaseline.append(tempcoverageAreaBaseline)
-             temp1areaWeightedAgeBaseline.append(tempareaWeightedAgeBaseline)
-             
-             temp1coverageAreaSensSelec.append(tempcoverageAreaSensSelec)
-             temp1areaWeightedAgeSensSelec.append(tempareaWeightedAgeSensSelec)
-             temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
-     
+         #######################################################################################################################
+         # Step 1: Find the labels of the obstructed pixels per sensor, for all available sensors in the network   
+         obstructedLabeledPixelsperSensor = findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N[ii], carDimensions, boxDim, plot)
+            
+         # Step 2: Sort the obstructed pixels per sensor into different regions
+         sortedObstructedPixelsperSensor = sortObstructedPixelPerSensor(labeledMatrixPixel,labeledPixels,obstructedLabeledPixelsperSensor,numSquaresperLength,numSquaresperWidth,N[ii])
+            
+         # Step 3: Put weight on pixels depending on region area
+         weightedRegionsPerSensor = putWeightonRegions(sortedObstructedPixelsperSensor,N[ii])
          
+         # Weight the pixels by summing the weights we got from the previous function
+         weightedMap = weightPixels(labeledMatrixPixel,weightedRegionsPerSensor,sortedObstructedPixelsperSensor,N[ii])
+         
+         # Plot the heat map
+         if plot == 1:
+             plt.figure()
+             ax = sns.heatmap(weightedMap)
+             plt.savefig(os.path.join(path, 'heatmap.pdf'))
+         # Step : Compute the different partitions areas
+         partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,labeledPixels,labeledMatrixPixel,N[ii],carDimensions,boxDim,obstructedLabeledPixelsperSensor)
+             
+         tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[ii]*mu*d), d, partitionsArea*scalingFactor**2 , allPossibleSets, scalingFactor)
+         tempcoverageAreaSensSelec , tempareaWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N[ii], d, capacity , mu, partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam ,thresh = 2.)
+         tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, mu, capacity , partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor , rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, T, lam ,thresh = 2.)
+         
+ 
+         temp1coverageAreaBaseline.append(tempcoverageAreaBaseline)
+         temp1areaWeightedAgeBaseline.append(tempareaWeightedAgeBaseline)
+         
+         temp1coverageAreaSensSelec.append(tempcoverageAreaSensSelec)
+         temp1areaWeightedAgeSensSelec.append(tempareaWeightedAgeSensSelec)
+         temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
+ 
      
-             temp1coverageAreaAgeMin.append(tempcoverageAreaAgeMin)
-             temp1areaWeightedAgeAgeMin.append(tempareaWeightedAgeAgeMin)
-             temp1selectedSensorsAgeMin.append(len(tempselectedSensorsAgeMin))
+ 
+         temp1coverageAreaAgeMin.append(tempcoverageAreaAgeMin)
+         temp1areaWeightedAgeAgeMin.append(tempareaWeightedAgeAgeMin)
+         temp1selectedSensorsAgeMin.append(len(tempselectedSensorsAgeMin))
      
              
-         coverageAreaBaseline.append(np.sum(temp1coverageAreaBaseline)/numIter/areaR*100.)
-         areaWeightedAgeBaseline.append(np.sum(temp1areaWeightedAgeBaseline)/numIter*1000.)
-          
-         coverageAreaSensSelec.append(np.sum(temp1coverageAreaSensSelec)/numIter/areaR*100.)
-         areaWeightedAgeSensSelec.append(np.sum(temp1areaWeightedAgeSensSelec)/numIter*1000.)
-         selectedSensorsSensSelec.append(np.sum(temp1selectedSensorsSensSelec)/numIter)
-     
-         coverageAreaAgeMin.append(np.sum(temp1coverageAreaAgeMin)/numIter/areaR*100.)
-         areaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter*1000.)
-         selectedSensorsAgeMin.append(np.sum(temp1selectedSensorsAgeMin)/numIter)        
-    
-    
-    
-    
     #################  Plots  ######################################
   
     
