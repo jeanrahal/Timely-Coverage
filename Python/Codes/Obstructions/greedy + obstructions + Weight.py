@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import transforms
 import matplotlib.patches as patches
 from tqdm import tqdm 
 import random
@@ -179,10 +180,7 @@ def findCarCoords(coordSensors,carDimensions, boxDim, N):
     return carsCoords
 
 
-def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstructions, boxDim):
-    
-    pixelLength = 0.01
-    pixelWidth = 0.01
+def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstructions, boxDim, pixelLength = 1., pixelWidth = 1.):
     
     plt.clf()
     fig,ax = plt.subplots(1)
@@ -190,10 +188,10 @@ def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstr
     ax.add_patch(rect)
 
     plt.xlim(0, boxDim[0])
-    plt.ylim(0, boxDim[1]+10)
+    plt.ylim(0, boxDim[1])
     
-    edgecol = ['red','blue','green','orange','yellow','purple']
-    facecol = ['red','blue','green','orange','yellow','purple']
+    edgecol = ['red','blue','green','orange','yellow','purple','black','gray','silver','gold','maroon','coral']
+    facecol = ['red','blue','green','orange','yellow','purple','black','gray','silver','gold','maroon','coral']
     
     for ii in range(len(coordPixels)):
         rect = patches.Rectangle((coordPixels[ii][0]-pixelLength/2,coordPixels[ii][1]-pixelWidth/2),pixelLength,pixelWidth,linewidth=1,edgecolor='black',facecolor='none')
@@ -202,14 +200,14 @@ def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstr
     for sensor in range(len(coordSensors)):
         rect = patches.Rectangle((carsCoords[sensor][-1][0],carsCoords[sensor][-1][1]),carDimensions[0],carDimensions[1],linewidth=1,edgecolor=edgecol[sensor],facecolor='none')
         ax.add_patch(rect)
-        circle = plt.Circle((coordSensors[sensor][0], coordSensors[sensor][1]), 2, edgecolor=edgecol[sensor],facecolor='none')
+        circle = plt.Circle((coordSensors[sensor][0], coordSensors[sensor][1]), 20, edgecolor=edgecol[sensor],facecolor='none')
         ax.add_patch(circle)
         for obs in range(len(obstructions[sensor])):
             temp = obstructions[sensor][obs]
             rect = patches.Rectangle(((coordPixels[temp][0]-pixelLength/2),(coordPixels[temp][1]-pixelWidth/2)),pixelLength,pixelWidth,linewidth=1,edgecolor=edgecol[sensor],facecolor=facecol[sensor])
             ax.add_patch(rect)
             
-            
+        
     plt.savefig(os.path.join(path, 'Obstructed Views.eps'))
     plt.savefig(os.path.join(path, 'Obstructed Views.pdf'))
             
@@ -217,7 +215,7 @@ def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstr
     return None
 
 
-def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, carDimensions, boxDim, plot=0):
+def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, carDimensions, boxDim, plot):
     obstructions = []
     
     ''' 
@@ -252,8 +250,8 @@ def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, 
                             obstructions[sensor].append(labeledPixels[pixel])
                             break
     
-#    if plot == 1:
-#        plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstructions, boxDim)
+    if plot == 1:
+        plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstructions, boxDim)
                         
     return obstructions
 
@@ -376,10 +374,6 @@ def weightPixels(labeledMatrixPixel,weightedRegionsPerSensor,sortedObstructedPix
     return weightedMap 
 
 
-
-
-
-
 def divideMapintoRegions(weightedMap, labeledMatrixPixel, labeledPixels, numPixelsperLength, numPixelsperWidth):
     '''
     input: weighted map with all the pixels labels
@@ -425,42 +419,19 @@ def divideMapintoRegions(weightedMap, labeledMatrixPixel, labeledPixels, numPixe
     
     return regionID, IDMap
 
-#def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,labeledPixels,labeledMatrixPixel,N,carDimensions,boxDim,obstructedLabeledPixelsperSensor):
-#    tempPartitionsPixels = np.zeros(2**N-1)
-#    partitionsPixels = np.zeros(2**N-1)
-#    temp = np.zeros(2**N-1)
-#    temp1 = []
-#    allPossibleSets = []
-#    
-#    for ii in range(1,N+1):
-#        hello = findsubsets(np.arange(1,N+1,1),ii) 
-#        #hello1 = (np.asarray(hello))
-#        for jj in range(len(hello)):
-#            allPossibleSets.append(list(hello[jj]))
-#        
-#    
-#    for pixel in range(len(coordPixels)):
-#        for sensor in range(N):
-#            if pixelisInCircle(sensor,sensorRadius,pixel,coordPixels,coordSensors) == 1 and labeledPixels[pixel] not in obstructedLabeledPixelsperSensor[sensor]:
-#               tempPartitionsPixels[sensor] = tempPartitionsPixels[sensor] + 1 
-#        
-#        if np.sum(tempPartitionsPixels) > 1:
-#            idxOnes = np.nonzero(tempPartitionsPixels)
-#            for ii in range(idxOnes[0].size):
-#                temp1.append(idxOnes[0][ii]+1)        
-#            idxPartition = allPossibleSets.index(temp1)
-#            temp[idxPartition] = 1
-#        else:
-#            temp = tempPartitionsPixels
-#            
-#        partitionsPixels = partitionsPixels + temp
-#        
-#        tempPartitionsPixels = np.zeros(2**N-1)
-#        temp = np.zeros(2**N-1)
-#        temp1 = []
-#        
-#    return partitionsPixels*pixelLength*pixelWidth, allPossibleSets
 
+def findSensorsPerPixel(selectedSensors, labeledMatrixPixel, sensorRadius, coordPixels, coordSensors):
+    numSensorsPerPixelMap = np.zeros(np.shape(labeledMatrixPixel)) 
+    
+    for pixel in range(np.prod(np.shape(labeledMatrixPixel))):
+        index = np.where(labeledMatrixPixel == pixel)
+        
+        for ss in range(len(selectedSensors)):
+            selectedSensor = selectedSensors[ss]
+            if pixelisInCircle(selectedSensor-1,sensorRadius,pixel,coordPixels,coordSensors) == 1:
+                numSensorsPerPixelMap[index[0][0]][index[1][0]] += 1
+    
+    return numSensorsPerPixelMap
 
 
 
@@ -508,19 +479,20 @@ def findPartitionsWeights(pixelLength, pixelWidth, coordPixels,coordSensors,sens
     return partitionsWeights, allPossibleSets
 
 
-def  baselineModel(ratePerSensor , d, partitionsArea , allPossibleSets, scalingFactor):
-    areaWeightedAge = 0.
-    coverageArea = np.sum(partitionsArea)
+def  baselineModel(ratePerSensor , d, partitionsWeights , allPossibleSets, scalingFactor):
+    weightedAge = 0.
+    coverageWeights = np.sum(partitionsWeights)
+    percentageCoverageWeight = np.sum(partitionsWeights)/np.sum(partitionsWeights)*100.
     AgePerPartition = []
-    for ii in range(len(partitionsArea)):
+    for ii in range(len(partitionsWeights)):
         n = len(allPossibleSets[ii])
         tempAge = d + (1./(n+1.))*(1/ratePerSensor) 
         #tempAge = (n+2.)/(n+1.)*(1/ratePerSensor)
         AgePerPartition.append(tempAge)
     
-    areaWeightedAge = np.sum(partitionsArea*AgePerPartition)/coverageArea
+    weightedAge = np.sum(partitionsWeights*AgePerPartition)/coverageWeights
     
-    return coverageArea, areaWeightedAge
+    return percentageCoverageWeight, weightedAge
 
 
 
@@ -570,17 +542,68 @@ def compute_b(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,ra
     
     percentageCoveredWeight = totalCoveredWeight/np.sum(np.sum(weightedMap))*100.
     
-    return b, percentageCoveredWeight , weightedAge , selectedPartitionsArea
+    return b, percentageCoveredWeight , weightedAge/totalCoveredWeight , selectedPartitionsArea
+
+
+
+#def compute_a(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors, ratePerSensor, jj+1, allPossibleSets,weightedMap, lam, gamma, eps):
+#    a = 0.
+#    AgePerPartition = []
+#    coveredWeight = []
+#    tempP = np.zeros(2**N-1)
+#    newPartitionWeight = np.zeros(2**N-1)
+#    if not setofSelectedSensors:
+#        currSensors = np.array(currSensor)
+#        for ii in range(len(partitionsWeight)):
+#            if currSensors in allPossibleSets[ii]:    
+#                tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+#                newPartitionWeight[ii] = partitionsWeight[ii] 
+#    else:
+#        currSensors = copy.copy(setofSelectedSensors)
+#        currSensors.append(currSensor)
+#        for s in range(len(currSensors)):
+#            for ii in range(len(partitionsWeight)):
+#                if currSensors[s] in allPossibleSets[ii]:    
+#                    tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+#                    newPartitionWeight[ii] = partitionsWeight[ii]                    
+#                
+#                
+#    for ii in range(len(partitionsWeight)):
+#        n = tempP[ii]
+#        if n!=0:
+#            tempAge = d + (1./(n+1.))*(1./ratePerSensor) 
+#            #tempAge = (n+2.)/(n+1.)*(1./ratePerSensor)
+#            if np.isnan(tempAge):
+#               AgePerPartition.append(0.)
+#            else:
+#               AgePerPartition.append(tempAge)
+#            coveredWeight.append(newPartitionWeight[ii])
+#        else:
+#            AgePerPartition.append(0.)
+#            coveredWeight.append(0.)
+#            
+#    totalCoveredWeight = np.sum(coveredWeight)        
+#    weightedAge = np.sum(np.array(coveredWeight)*np.array(AgePerPartition))        
+#    selectedPartitionsArea = copy.copy(newPartitionWeight)
+#    
+#    a = weightedAge + lam*(np.sum(partitionsWeight)-totalCoveredWeight ) 
+#
+#    percentageCoveredWeight = totalCoveredWeight/np.sum(np.sum(weightedMap))*100.
+#    
+#    return a, percentageCoveredWeight , weightedAge/totalCoveredWeight , selectedPartitionsArea
+
+
+
+
 
 #@jit(target ="cuda")  
 def SensSelecModel(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam, thresh = 2.):
-    areaWeightedAge = 0.
     #coverageArea = np.sum(partitionsWeight)
     numSelectedSensors = N
     setofSelectedSensors = []
     setofSensors = np.arange(1,N+1,1)
     
-    k = 3.
+    k = 5.
     #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
     if int(N)>int(k):
        numSelectedSensors = int(k) 
@@ -608,16 +631,63 @@ def SensSelecModel(N, d, capacity, mu, weightedMap, partitionsWeight , allPossib
     
     return coverageWeight , weightedAge , setofSelectedSensors
 
-#@jit(target ="cuda")  
-def AgeMinModel(N, d, mu, capacity , partitionsWeight , allPossibleSets, rectangleLength , rectangleWidth , sensorRadius, scalingFactor , T, lam, thresh = 2.):
-    areaWeightedAge = 0.
-    coverageArea = np.sum(partitionsWeight)
+
+
+
+
+
+def SensSelecModel1(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam):
+    #coverageArea = np.sum(partitionsWeight)
     numSelectedSensors = N
     setofSelectedSensors = []
     setofSensors = np.arange(1,N+1,1)
     
-    k = 6.
-    #np.ceil((rectangleLength/sensorRadius)*1.)
+    k = 5.
+    #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
+    if int(N)>int(k):
+       numSelectedSensors = int(k) 
+    
+    ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    lam = d*(1.+2./3.*numSelectedSensors)
+    
+    gamma = 0.9*(d+1/ratePerSensor)
+    eps = 1e-1
+    
+    new_max = 0.
+    temp_a_old = 0.
+    for ii in range(int(numSelectedSensors)):
+        a_old = temp_a_old
+        new_max = 0.
+        for jj in range(N):
+            if jj + 1 not in setofSelectedSensors:
+                a_new, temp_percentageCoveredWeight , temp_weightedAge , selectedPartitionsArea = compute_a(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors, ratePerSensor, jj+1, allPossibleSets,weightedMap, lam, gamma, eps)
+                if np.abs(a_new - a_old) >= new_max:
+                    new_max = (a_new - a_old)
+                    temp_a_old = a_new
+                    selectedSensor = jj+1
+                    coverageWeight = temp_percentageCoveredWeight
+                    weightedAge = temp_weightedAge 
+        setofSelectedSensors.append(selectedSensor)
+                
+    #setofSelectedSensors = np.sort(setofSelectedSensors)
+    
+    return coverageWeight , weightedAge , setofSelectedSensors
+
+
+
+
+
+
+
+
+#@jit(target ="cuda")  
+def AgeMinModel(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, lam, thresh = 2.):
+    numSelectedSensors = N
+    setofSelectedSensors = []
+    setofSensors = np.arange(1,N+1,1)
+    
+    k = 5.
+    #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
     if int(N)>int(k):
        numSelectedSensors = int(k) 
     
@@ -630,16 +700,16 @@ def AgeMinModel(N, d, mu, capacity , partitionsWeight , allPossibleSets, rectang
         b_old = temp_b_old
         new_max = 0.
         for jj in range(N):
-            if jj+1 not in setofSelectedSensors:
-                b_new, tempcoverageArea , tempareaWeightedAge,selectedPartitionsArea = compute_b(N, d ,mu, partitionsWeight, setofSelectedSensors, setofSensors ,ratePerSensor, jj+1, allPossibleSets, lam)
+            if jj + 1 not in setofSelectedSensors:
+                b_new, temp_percentageCoveredWeight , temp_weightedAge , selectedPartitionsArea = compute_b(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors, ratePerSensor, jj+1, allPossibleSets,weightedMap, lam)
                 if np.abs(b_new - b_old) >= new_max:
                     new_max = (b_new - b_old)
                     temp_b_old = b_new
                     selectedSensor = jj+1
-                    coverageArea = tempcoverageArea
-                    areaWeightedAge = tempareaWeightedAge
+                    coverageWeight = temp_percentageCoveredWeight
+                    weightedAge = temp_weightedAge 
         setofSelectedSensors.append(selectedSensor)
-                
+               
     setofSelectedSensors = np.sort(setofSelectedSensors)
     
     
@@ -652,7 +722,7 @@ def AgeMinModel(N, d, mu, capacity , partitionsWeight , allPossibleSets, rectang
         for jj in range(len(hello)):
             newallPossibleSets.append(list(hello[jj]))
     
-    newselectedPartitionsArea = np.zeros(2**(numSelectedSensors)-1)
+    newselectedPartitionsWeight = np.zeros(2**(numSelectedSensors)-1)
         
     for ii in range(len(allPossibleSets)):
         temp = []
@@ -662,36 +732,40 @@ def AgeMinModel(N, d, mu, capacity , partitionsWeight , allPossibleSets, rectang
         if temp:
             #temp = np.sort(temp)
             idx = newallPossibleSets.index(temp)
-            newselectedPartitionsArea[idx] = newselectedPartitionsArea[idx] + partitionsArea[ii]    
+            newselectedPartitionsWeight[idx] = newselectedPartitionsWeight[idx] + partitionsWeight[ii]    
             
     # Compute new rate allocation and new ageWeightedArea
-    rate_fw_agemin,  obj_fn, l1_fw_agemin = descent(N,frank_wolfe, d, numSelectedSensors, setofSelectedSensors, newallPossibleSets, np.array(newselectedPartitionsArea), capacity/(mu*d), T=T)
+    rate_fw_agemin,  obj_fn, l1_fw_agemin = descent(N,frank_wolfe, d, numSelectedSensors, setofSelectedSensors, newallPossibleSets, np.array(newselectedPartitionsWeight), capacity/(mu*d), T=T)
     
-    return coverageArea , obj_fn[-1] , setofSelectedSensors
+    return coverageWeight , obj_fn[-1] , setofSelectedSensors
 
 
 
 def main(T=int(5e2)): 
-    scalingFactor = 5
-    N = np.arange(2,6,1) # number of sensors
+    scalingFactor = 1
+    N = np.arange(2,3,1) # number of sensors
     lam = 1.
     sensorRadius = np.array(20/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
     #sensorRadius = np.array([1.,1.,1.,1.,1.,2.,2.,2.,2.,2.])    
     capacity = 1.
     d = 4.2e-3 #transmission delay
-    mu = 1. #packet size
+    mu = 1. #packet size 
+    
+    
+    #### Region of interest of car  #####
     
     
     plot = 0
+    plot2 = 0
     
     rectangleLength = 100/scalingFactor
-    rectangleWidth = 10/scalingFactor
+    rectangleWidth = 100/scalingFactor
     boxDim = np.array([rectangleLength,rectangleWidth])
     areaR = rectangleLength*rectangleWidth*scalingFactor**2
     
-    numSquaresperLength = int(rectangleLength*10)
-    numSquaresperWidth = int(rectangleWidth*10)
+    numSquaresperLength = int(rectangleLength)
+    numSquaresperWidth = int(rectangleWidth)
     
     pixelLength = rectangleLength/numSquaresperLength
     pixelWidth = rectangleWidth/numSquaresperWidth
@@ -710,8 +784,8 @@ def main(T=int(5e2)):
             countPixel += 1
     
     
-    carLength = 3.5
-    carWidth = 2.5
+    carLength = 4.48
+    carWidth = 1.83
     carLengthScaled = carLength/scalingFactor
     carWidthScaled = carWidth/scalingFactor
     
@@ -719,9 +793,15 @@ def main(T=int(5e2)):
 
     coverageAreaBaseline = []
     areaWeightedAgeBaseline = []
+    
     coverageSensSelec = []
     weightedAgeSensSelec = []
     selectedSensorsSensSelec = []
+
+    coverageSensSelec1 = []
+    weightedAgeSensSelec1 = []
+    selectedSensorsSensSelec1 = []
+    
     coverageAreaAgeMin = []
     areaWeightedAgeAgeMin = []
     selectedSensorsAgeMin = []
@@ -731,9 +811,15 @@ def main(T=int(5e2)):
     for ii in tqdm(range(len(N))):
          temp1coverageAreaBaseline = []
          temp1areaWeightedAgeBaseline = []
+         
          temp1coverageSensSelec = []
          temp1WeightedAgeSensSelec = []
          temp1selectedSensorsSensSelec = []
+         
+         temp1coverageSensSelec1 = []
+         temp1WeightedAgeSensSelec1 = []
+         temp1selectedSensorsSensSelec1 = []         
+         
          temp1coverageAreaAgeMin = []
          temp1areaWeightedAgeAgeMin =[]
          temp1selectedSensorsAgeMin =[]
@@ -788,7 +874,7 @@ def main(T=int(5e2)):
              if plot == 1:
                  plt.figure()
                  ax = sns.heatmap(weightedMap)
-                 plt.savefig(os.path.join(path, 'heatmap.pdf'))
+                 plt.savefig(os.path.join(path, 'heat-Weighted-Map.pdf'))
             
             
              # Step: Divide the map into regions based on different weights
@@ -803,11 +889,18 @@ def main(T=int(5e2)):
 
 
                  
-             #tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[ii]*mu*d), d, partitionsArea*scalingFactor**2 , allPossibleSets, scalingFactor)
+             #tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[ii]*mu*d), d, partitionsWeights , allPossibleSets, scalingFactor)
              tempcoverageSensSelec , tempWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N[ii], d, capacity , mu, weightedMap, partitionsWeights , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam ,thresh = 2.)
-             #tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, mu, capacity , partitionsArea*scalingFactor**2 , allPossibleSets, rectangleLength*scalingFactor , rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, T, lam ,thresh = 2.)
+             #tempcoverageSensSelec1 , tempWeightedAgeSensSelec1 , tempselectedSensorsSensSelec1 = SensSelecModel1(N[ii], d, capacity , mu, weightedMap, partitionsWeights , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, lam)
+             #tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, capacity, mu, weightedMap, partitionsWeights , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, lam, thresh = 2.)
              
-     
+             if plot2 == 1:
+                 numSensorsPerPixelMap = findSensorsPerPixel(tempselectedSensorsSensSelec, labeledMatrixPixel, sensorRadius, coordPixels, coordSensors)
+                 plt.figure()
+                 ax = sns.heatmap(numSensorsPerPixelMap)
+                 plt.savefig(os.path.join(path, 'heat-Sensors-Map.pdf'))
+
+
 #             temp1coverageAreaBaseline.append(tempcoverageAreaBaseline)
 #             temp1areaWeightedAgeBaseline.append(tempareaWeightedAgeBaseline)
              
@@ -815,21 +908,27 @@ def main(T=int(5e2)):
              temp1WeightedAgeSensSelec.append(tempWeightedAgeSensSelec)
              temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
      
-         
+#             temp1coverageSensSelec1.append(tempcoverageSensSelec1)
+#             temp1WeightedAgeSensSelec1.append(tempWeightedAgeSensSelec1)
+#             temp1selectedSensorsSensSelec1.append(len(tempselectedSensorsSensSelec1))         
      
 #             temp1coverageAreaAgeMin.append(tempcoverageAreaAgeMin)
 #             temp1areaWeightedAgeAgeMin.append(tempareaWeightedAgeAgeMin)
 #             temp1selectedSensorsAgeMin.append(len(tempselectedSensorsAgeMin))
      
              
-#         coverageAreaBaseline.append(np.sum(temp1coverageAreaBaseline)/numIter/areaR*100.)
+#         coverageAreaBaseline.append(np.sum(temp1coverageAreaBaseline)/numIter)
 #         areaWeightedAgeBaseline.append(np.sum(temp1areaWeightedAgeBaseline)/numIter*1000.)
           
          coverageSensSelec.append(np.sum(temp1coverageSensSelec)/numIter)
          weightedAgeSensSelec.append(np.sum(temp1WeightedAgeSensSelec)/numIter*1000.)
          selectedSensorsSensSelec.append(np.sum(temp1selectedSensorsSensSelec)/numIter)
+         
+#         coverageSensSelec1.append(np.sum(temp1coverageSensSelec1)/numIter)
+#         weightedAgeSensSelec1.append(np.sum(temp1WeightedAgeSensSelec1)/numIter*1000.)
+#         selectedSensorsSensSelec1.append(np.sum(temp1selectedSensorsSensSelec1)/numIter)         
      
-#         coverageAreaAgeMin.append(np.sum(temp1coverageAreaAgeMin)/numIter/areaR*100.)
+#         coverageAreaAgeMin.append(np.sum(temp1coverageAreaAgeMin)/numIter)
 #         areaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter*1000.)
 #         selectedSensorsAgeMin.append(np.sum(temp1selectedSensorsAgeMin)/numIter)        
     
@@ -842,6 +941,7 @@ def main(T=int(5e2)):
     plt.clf()
     #plt.plot(N , areaWeightedAgeBaseline, '--', label='Baseline')
     plt.plot(N , weightedAgeSensSelec, '.-',label='Sensor Selection')
+    #plt.plot(N , weightedAgeSensSelec1, '.',label='New Sensor Selection')
     #plt.plot(N , areaWeightedAgeAgeMin, label='Age Minimization')
      #plt.title('Area weighted age as a function of the number of selected sensors', fontsize=12)
     plt.legend()
@@ -855,6 +955,7 @@ def main(T=int(5e2)):
     plt.clf()
     #plt.plot(N , coverageAreaBaseline, '--', label='Baseline')
     plt.plot(N , coverageSensSelec, '.-',label='Sensor Selection')
+    #plt.plot(N , coverageSensSelec1, '.',label='New Sensor Selection')
     #plt.plot(N , coverageAreaAgeMin, label='Age Minimization')
      #plt.title('Coverage Area as a function of the number of selected sensors', fontsize=12)
     plt.legend()
