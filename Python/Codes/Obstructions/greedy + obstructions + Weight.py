@@ -215,6 +215,39 @@ def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstr
     return None
 
 
+#################     PER CAR REGION OF INTEREST   ###########################
+def findCoordregionOfInterestPerSensor(coordPixels,coordSensors,N,length_box_per_car,width_box_per_car,boxDim):
+    coordRegionofInterest = []
+    
+    for car in range(N):
+        a = coordSensors[car][0]+length_box_per_car
+        b = coordSensors[car][1]+width_box_per_car
+        c = coordSensors[car][1]-width_box_per_car
+        d = coordSensors[car][0]-length_box_per_car
+        
+        coordRegionofInterest.append([[a if a<= boxDim[0] else boxDim[0], b if b<= boxDim[1] else boxDim[1]],
+                                      [a if a<= boxDim[0] else boxDim[0], c if c>= 0 else 0],
+                                      [d if d>= 0 else 0, b if b<= boxDim[1] else boxDim[1]],
+                                      [d if d>= 0 else 0, c if c>= 0 else 0]])
+        
+    return coordRegionofInterest
+    
+    
+def findPixelsinRegionOfInterest(N,coordPixels,coordSensors,length_box_per_car,width_box_per_car,labeledPixels):
+    pixelsPerBoxPerSensor = []
+    
+    for sensor in range(N):
+        pixelsPerBoxPerSensor.append(())
+        for pixel in range(len(coordPixels)):
+            currPixelCoord = coordPixels[pixel]
+            if currPixelCoord[0] >= coordSensors[sensor][0] - length_box_per_car and currPixelCoord[0] <= coordSensors[sensor][0] + length_box_per_car and currPixelCoord[1] >= coordSensors[sensor][1] - width_box_per_car and currPixelCoord[1] <= coordSensors[sensor][1] + width_box_per_car:
+                pixelsPerBoxPerSensor[sensor] = pixelsPerBoxPerSensor[sensor] + (labeledPixels[pixel],) 
+
+
+    return pixelsPerBoxPerSensor    
+
+
+
 def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, carDimensions, boxDim, plot):
     obstructions = []
     
@@ -745,24 +778,32 @@ def main(T=int(5e2)):
     scalingFactor = 1
     N = np.arange(2,3,1) # number of sensors
     lam = 1.
-    sensorRadius = np.array(20/scalingFactor)#coverage radius per sensor
+    sensorRadius = np.array(5/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
     #sensorRadius = np.array([1.,1.,1.,1.,1.,2.,2.,2.,2.,2.])    
     capacity = 1.
-    d = 4.2e-3 #transmission delay
-    mu = 1. #packet size 
-    
-    
-    #### Region of interest of car  #####
-    
+    d = 4.2e-3 # transmission delay
+    mu = 1. # packet size 
     
     plot = 0
     plot2 = 0
     
     rectangleLength = 100/scalingFactor
-    rectangleWidth = 100/scalingFactor
+    rectangleWidth = 20/scalingFactor
     boxDim = np.array([rectangleLength,rectangleWidth])
     areaR = rectangleLength*rectangleWidth*scalingFactor**2
+
+
+    #### Region of interest of car  #####
+    
+    t_interest = 4.8 #seconds
+    speed = 50./3 # 60 km/hour
+    
+    #length_box_per_car = 2*t_interest*speed
+    length_box_per_car = 10.
+    width_box_per_car = rectangleWidth
+
+    ######################################
     
     numSquaresperLength = int(rectangleLength)
     numSquaresperWidth = int(rectangleWidth)
@@ -858,6 +899,20 @@ def main(T=int(5e2)):
 #             coordSensors = np.concatenate((xcoordSensors,ycoordSensors),axis=1)             
              
              #######################################################################################################################
+             
+             #########################     PER SENSOR REGION OF INTEREST      ##############################
+             
+             # Step 1: Find 4 corners of box of region of interest per car
+             #regionOfInterestPerSensor = findCoordregionOfInterestPerSensor(coordPixels,coordSensors,N[ii],length_box_per_car,width_box_per_car,boxDim)
+             
+             # Step 2: Find pixels in the region of interest
+             pixelsInRegionOfInterest = findPixelsinRegionOfInterest(N[ii],coordPixels,coordSensors,length_box_per_car,width_box_per_car,labeledPixels)
+             
+             
+             
+             
+             #########################    REGION OF INTEREST IS THE WHOLE BOX  ############################ 
+             
              # Step 1: Find the labels of the obstructed pixels per sensor, for all available sensors in the network   
              obstructedLabeledPixelsperSensor = findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N[ii], carDimensions, boxDim, plot)
                 
