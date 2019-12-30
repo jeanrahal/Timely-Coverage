@@ -216,7 +216,7 @@ def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstr
 
 
 #################     PER CAR REGION OF INTEREST   ###########################
-def findCoordregionOfInterestPerSensor(coordPixels,coordSensors,N,length_box_per_car,width_box_per_car,boxDim):
+def findCoordregionOfInterestPerSensor_1(coordPixels,coordSensors,N,length_box_per_car,width_box_per_car,boxDim):
     coordRegionofInterest = []
     
     for car in range(N):
@@ -232,8 +232,95 @@ def findCoordregionOfInterestPerSensor(coordPixels,coordSensors,N,length_box_per
         
     return coordRegionofInterest
     
+
+def findobstructedPixelsinBox_1(N, pixelsPerBoxPerSensor, coordSensors, coordPixels, sensorRadius, carDimensions, carRoI, boxDim, plot):
+    obstructedPixelsinBox = []
     
-def findPixelsinRegionOfInterest(N,coordPixels,coordSensors,length_box_per_car,width_box_per_car,labeledPixels):
+    ''' 
+    Goal: Find the coord of obstructed pixels for each sensor in box of interest
+    
+    Inputs: coord Pixels, coord sensors, sensor radius, # of sensors, car dimensions: W x L
+    Output: list of lists, each list is the set of obstructed pixels per sensor per box
+    '''
+    
+    carsCoords = findCarCoords(coordSensors,carDimensions, boxDim, N)
+    
+    for sensor in range(N):
+        ## Find obstructing other sensors
+        obstructingSensors = []
+        for otherSensor in range(N):
+            if otherSensor != sensor:
+                currSensorCoord = coordSensors[otherSensor]
+                if pixelisInCircle(sensor,sensorRadius,otherSensor,coordSensors,coordSensors) and currSensorCoord[0] >= coordSensors[sensor][0] - carRoI[0] and currSensorCoord[0] <= coordSensors[sensor][0] + carRoI[0] and currSensorCoord[1] >= coordSensors[sensor][1] - carRoI[1] and currSensorCoord[1] <= coordSensors[sensor][1] + carRoI[1]:
+                    obstructingSensors.append(otherSensor)
+        ########
+        obstructedPixelsinBox.append([])
+        for pixel in range(len(pixelsPerBoxPerSensor[sensor])):
+            # Step 1: check if the selected pixel is first within the range of observability of the selected sensor
+            if pixelisInCircle(sensor,sensorRadius,pixelsPerBoxPerSensor[sensor][pixel],coordPixels,coordSensors) == 1:
+                # Step 2: check if the pixel is obstructed
+                if obstructingSensors:
+                    for otherSensor in range(len(obstructingSensors)):
+                        # Compute all the slopes between the selected sensor and other sensors
+                        slope = []
+                        for ii in range(len(carsCoords[obstructingSensors[otherSensor]])):
+                            slope.append((coordSensors[sensor][1]-carsCoords[obstructingSensors[otherSensor]][ii][1])/(coordSensors[sensor][0]-carsCoords[obstructingSensors[otherSensor]][ii][0]))
+                        
+                        pickedSlopes = np.array([min(slope),max(slope)])
+                        distSensors = np.linalg.norm(coordSensors[sensor]-coordSensors[obstructingSensors[otherSensor]])
+                        distSensorToPixel = np.linalg.norm(coordSensors[sensor]-coordPixels[pixel])
+                        distPixelTootherSens = np.linalg.norm(coordPixels[pixel]-coordSensors[obstructingSensors[otherSensor]])
+                        slopeSensorPixel = (coordSensors[sensor][1]-coordPixels[pixel][1])/(coordSensors[sensor][0]-coordPixels[pixel][0])
+                        
+                        if distSensorToPixel > distSensors and distSensorToPixel > distPixelTootherSens and slopeSensorPixel >= pickedSlopes[0] and slopeSensorPixel <= pickedSlopes[1]:
+                            obstructedPixelsinBox[sensor].append(pixelsPerBoxPerSensor[sensor][pixel])
+                            break
+            elif pixelisInCircle(sensor,sensorRadius,pixelsPerBoxPerSensor[sensor][pixel],coordPixels,coordSensors) == 0:
+                obstructedPixelsinBox[sensor].append(pixelsPerBoxPerSensor[sensor][pixel])
+                        
+    
+    if plot == 1:
+        plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstructedPixelsinBox, boxDim)    
+    
+    return obstructedPixelsinBox
+
+
+def sortObstructedPixelsperSensorinBox_1(N, obstructedPixelsinBox, labeledMatrixPixel,labeledPixels,regionOfInterestPerSensor, numSquaresPerLength, numSquaresPerWidth):
+    obstructedRegionsPerSensor = []
+    
+    for sensor in range(N):
+        ## Form the box around the sensors: Find the number of pixels per length and width
+        currRoI = regionOfInterestPerSensor[sensor] #
+        numPixelsperLength = (currRoI[0][0] - currRoI[2][0])*numSquaresPerLength
+        numPixelsperWidth = (currRoI[0][1] - currRoI[1][1])*numSquaresPerWidth
+        
+        # Store the pixels of the current sensor below
+        obstructedRegionsPerSensor.append([])
+        selectedSensorObstructedPixels = obstructedPixelsinBox[sensor]
+        regionsPerCurrentSensor = []
+        # Check if the set is non-empty
+        if selectedSensorObstructedPixels:
+            for currentPixel in range(len(selectedSensorObstructedPixels)):
+                # We now need to split the pixels:
+                #   regionsPerPixel: Store the obstructed regions per pixel = [Sensor1: [ Region 1 ], [ Region 2 ] Sensor2: [ Region 1 ], [ Region 2 ] ,[ Region 3 ]]
+                
+                # Find if the current pixel belongs to an older region or to a new one:
+                # If it belongs to an old region, return the region ID and add the pixel to it. Else append new region.
+                newRegionForCurrentPixel, regionID = detectRegion(selectedSensorObstructedPixels[currentPixel],regionsPerCurrentSensor,labeledMatrixPixel,labeledPixels,numPixelsperLength,numPixelsperWidth)
+                if newRegionForCurrentPixel:
+                    # We need to create a new region for the current sensor
+                    regionsPerCurrentSensor.append(())
+                    regionsPerCurrentSensor[-1] = (selectedSensorObstructedPixels[currentPixel],)
+                
+                else:
+                    regionsPerCurrentSensor[regionID] = regionsPerCurrentSensor[regionID] + (selectedSensorObstructedPixels[currentPixel],)
+        
+        obstructedRegionsPerSensor[sensor].append(regionsPerCurrentSensor)                    
+                    
+    return obstructedRegionsPerSensor
+    
+
+def findPixelsinRegionOfInterest_1(N,coordPixels,coordSensors,length_box_per_car,width_box_per_car,labeledPixels):
     pixelsPerBoxPerSensor = []
     
     for sensor in range(N):
@@ -246,6 +333,8 @@ def findPixelsinRegionOfInterest(N,coordPixels,coordSensors,length_box_per_car,w
 
     return pixelsPerBoxPerSensor    
 
+
+###############################################################################
 
 
 def findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N, carDimensions, boxDim, plot):
@@ -382,13 +471,14 @@ def putWeightonRegions(sortedObstructedPixelsperSensor,N):
     for sensor in range(N):
         currentObstructedPixels = sortedObstructedPixelsperSensor[sensor]
         weightedPixelsPerSensor.append([])
+        temp = []
         
         for ii in range(len(currentObstructedPixels[0])): # Loop over the regions
             if currentObstructedPixels[0]:
-                weightedPixelsPerSensor[sensor].append(len(currentObstructedPixels[0][ii]))
+                temp.append(len(currentObstructedPixels[0][ii]))
             
         # divide by total area
-        weightedPixelsPerSensor[sensor] = weightedPixelsPerSensor[sensor]/np.sum(weightedPixelsPerSensor[sensor]) 
+        weightedPixelsPerSensor[sensor] = 1./np.sum(temp) 
 
     return weightedPixelsPerSensor
 
@@ -398,10 +488,11 @@ def weightPixels(labeledMatrixPixel,weightedRegionsPerSensor,sortedObstructedPix
     weightedMap = np.zeros(np.shape(labeledMatrixPixel))
     
     for sensor in range(N):
-        for ii in range(len(weightedRegionsPerSensor[sensor])):
-            currentWeight = weightedRegionsPerSensor[sensor][ii]
-            for jj in range(len(sortedObstructedPixelsperSensor[sensor][0][ii])):
-                index = np.where(labeledMatrixPixel == sortedObstructedPixelsperSensor[sensor][0][ii][jj])
+        #for ii in range(len(weightedRegionsPerSensor[sensor])):
+        currentWeight = weightedRegionsPerSensor[sensor]#[ii]
+        for jj in range(len(sortedObstructedPixelsperSensor[sensor][0])):
+            for kk in range(len(sortedObstructedPixelsperSensor[sensor][0][jj])):
+                index = np.where(labeledMatrixPixel == sortedObstructedPixelsperSensor[sensor][0][jj][kk])
                 weightedMap[index[0][0]][index[1][0]] = weightedMap[index[0][0]][index[1][0]] + currentWeight
 
     return weightedMap 
@@ -466,6 +557,41 @@ def findSensorsPerPixel(selectedSensors, labeledMatrixPixel, sensorRadius, coord
     
     return numSensorsPerPixelMap
 
+def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,labeledPixels,labeledMatrixPixel,N,carDimensions,boxDim,obstructedLabeledPixelsperSensor):
+    tempPartitionsPixels = np.zeros(2**N-1)
+    partitionsPixels = np.zeros(2**N-1)
+    temp = np.zeros(2**N-1)
+    temp1 = []
+    allPossibleSets = []
+    
+    for ii in range(1,N+1):
+        hello = findsubsets(np.arange(1,N+1,1),ii) 
+        #hello1 = (np.asarray(hello))
+        for jj in range(len(hello)):
+            allPossibleSets.append(list(hello[jj]))
+        
+    
+    for pixel in range(len(coordPixels)):
+        for sensor in range(N):
+            if pixelisInCircle(sensor,sensorRadius,pixel,coordPixels,coordSensors) == 1 and labeledPixels[pixel] not in obstructedLabeledPixelsperSensor[sensor]:
+               tempPartitionsPixels[sensor] = tempPartitionsPixels[sensor] + 1 
+        
+        if np.sum(tempPartitionsPixels) > 1:
+            idxOnes = np.nonzero(tempPartitionsPixels)
+            for ii in range(idxOnes[0].size):
+                temp1.append(idxOnes[0][ii]+1)        
+            idxPartition = allPossibleSets.index(temp1)
+            temp[idxPartition] = 1
+        else:
+            temp = tempPartitionsPixels
+            
+        partitionsPixels = partitionsPixels + temp
+        
+        tempPartitionsPixels = np.zeros(2**N-1)
+        temp = np.zeros(2**N-1)
+        temp1 = []
+        
+    return partitionsPixels*pixelLength*pixelWidth, allPossibleSets
 
 
 def findPartitionsWeights(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,labeledPixels,labeledMatrixPixel,N,carDimensions,boxDim,obstructedLabeledPixelsperSensor,regionID,weightedMap,IDmap):
@@ -512,7 +638,7 @@ def findPartitionsWeights(pixelLength, pixelWidth, coordPixels,coordSensors,sens
     return partitionsWeights, allPossibleSets
 
 
-def  baselineModel(ratePerSensor , d, partitionsWeights , allPossibleSets, scalingFactor):
+def baselineModel(ratePerSensor , d, partitionsWeights , allPossibleSets, scalingFactor):
     weightedAge = 0.
     coverageWeights = np.sum(partitionsWeights)
     percentageCoverageWeight = np.sum(partitionsWeights)/np.sum(partitionsWeights)*100.
@@ -630,7 +756,7 @@ def compute_b(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,ra
 
 
 #@jit(target ="cuda")  
-def SensSelecModel(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam, thresh = 2.):
+def SensSelecModel_1(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam, thresh = 2.):
     #coverageArea = np.sum(partitionsWeight)
     numSelectedSensors = N
     setofSelectedSensors = []
@@ -662,20 +788,21 @@ def SensSelecModel(N, d, capacity, mu, weightedMap, partitionsWeight , allPossib
                 
     #setofSelectedSensors = np.sort(setofSelectedSensors)
     
-    return coverageWeight , weightedAge , setofSelectedSensors
+    return setofSelectedSensors
 
 
 
 
 
 
-def SensSelecModel1(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam):
-    #coverageArea = np.sum(partitionsWeight)
+def SensSelecModel_2(N, d, capacity, mu, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam, thresh = 2.):
+    areaWeightedAge = 0.
+    coverageArea = np.sum(partitionsArea)
     numSelectedSensors = N
     setofSelectedSensors = []
     setofSensors = np.arange(1,N+1,1)
     
-    k = 5.
+    k = 6.
     #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
     if int(N)>int(k):
        numSelectedSensors = int(k) 
@@ -683,31 +810,41 @@ def SensSelecModel1(N, d, capacity, mu, weightedMap, partitionsWeight , allPossi
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
     lam = d*(1.+2./3.*numSelectedSensors)
     
-    gamma = 0.9*(d+1/ratePerSensor)
-    eps = 1e-1
-    
     new_max = 0.
-    temp_a_old = 0.
+    temp_b_old = 0.
     for ii in range(int(numSelectedSensors)):
-        a_old = temp_a_old
+        b_old = temp_b_old
         new_max = 0.
         for jj in range(N):
-            if jj + 1 not in setofSelectedSensors:
-                a_new, temp_percentageCoveredWeight , temp_weightedAge , selectedPartitionsArea = compute_a(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors, ratePerSensor, jj+1, allPossibleSets,weightedMap, lam, gamma, eps)
-                if np.abs(a_new - a_old) >= new_max:
-                    new_max = (a_new - a_old)
-                    temp_a_old = a_new
+            if jj+1 not in setofSelectedSensors:
+                b_new, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, ratePerSensor, jj+1, allPossibleSets, lam)
+                if np.abs(b_new - b_old) >= new_max:
+                    new_max = (b_new - b_old)
+                    temp_b_old = b_new
                     selectedSensor = jj+1
-                    coverageWeight = temp_percentageCoveredWeight
-                    weightedAge = temp_weightedAge 
+                    coverageArea = tempcoverageArea
+                    areaWeightedAge = tempareaWeightedAge
         setofSelectedSensors.append(selectedSensor)
                 
     #setofSelectedSensors = np.sort(setofSelectedSensors)
     
-    return coverageWeight , weightedAge , setofSelectedSensors
+    return coverageArea , areaWeightedAge/(coverageArea) , setofSelectedSensors
 
 
-
+def computeCoveredAreaOfinterest(selectedSensors,weightedMap,sensorRadius,pixelWidth,pixelLength,labeledPixelMatrix,coordPixels,coordSensors):
+    totalnumPixels = np.prod(np.shape(weightedMap))
+    coveredPixels = 0
+    
+    for pixel_0 in range(np.shape(weightedMap)[0]):
+        for pixel_1 in range(np.shape(weightedMap)[1]):
+            if weightedMap[pixel_0][pixel_1] > 0:
+                for sensor in range(len(selectedSensors)):
+                    if pixelisInCircle(selectedSensors[sensor],sensorRadius,int(labeledPixelMatrix[pixel_0][pixel_1]),coordPixels,coordSensors):
+                        coveredPixels += 1
+                        break
+    coverage = coveredPixels/totalnumPixels*100
+                    
+    return coverage
 
 
 
@@ -776,7 +913,7 @@ def AgeMinModel(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleS
 
 def main(T=int(5e2)): 
     scalingFactor = 1
-    N = np.arange(2,3,1) # number of sensors
+    N = np.arange(10,11,1) # number of sensors
     lam = 1.
     sensorRadius = np.array(5/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
@@ -788,8 +925,8 @@ def main(T=int(5e2)):
     plot = 0
     plot2 = 0
     
-    rectangleLength = 100/scalingFactor
-    rectangleWidth = 20/scalingFactor
+    rectangleLength = 40/scalingFactor
+    rectangleWidth = 5/scalingFactor
     boxDim = np.array([rectangleLength,rectangleWidth])
     areaR = rectangleLength*rectangleWidth*scalingFactor**2
 
@@ -802,11 +939,11 @@ def main(T=int(5e2)):
     #length_box_per_car = 2*t_interest*speed
     length_box_per_car = 10.
     width_box_per_car = rectangleWidth
-
+    carRoI = np.array([length_box_per_car,width_box_per_car])
     ######################################
     
-    numSquaresperLength = int(rectangleLength)
-    numSquaresperWidth = int(rectangleWidth)
+    numSquaresperLength = int(rectangleLength*10)
+    numSquaresperWidth = int(rectangleWidth*2)
     
     pixelLength = rectangleLength/numSquaresperLength
     pixelWidth = rectangleWidth/numSquaresperWidth
@@ -903,50 +1040,90 @@ def main(T=int(5e2)):
              #########################     PER SENSOR REGION OF INTEREST      ##############################
              
              # Step 1: Find 4 corners of box of region of interest per car
-             #regionOfInterestPerSensor = findCoordregionOfInterestPerSensor(coordPixels,coordSensors,N[ii],length_box_per_car,width_box_per_car,boxDim)
+             regionOfInterestPerSensor_1 = findCoordregionOfInterestPerSensor_1(coordPixels,coordSensors,N[ii],length_box_per_car,width_box_per_car,boxDim)
              
              # Step 2: Find pixels in the region of interest
-             pixelsInRegionOfInterest = findPixelsinRegionOfInterest(N[ii],coordPixels,coordSensors,length_box_per_car,width_box_per_car,labeledPixels)
+             pixelsPerBoxPerSensor_1 = findPixelsinRegionOfInterest_1(N[ii],coordPixels,coordSensors,length_box_per_car,width_box_per_car,labeledPixels)
              
+             # Step 3: Find obstructed pixels and non-observed pixels in region of interest
+             obstructedPixelsinBox_1 = findobstructedPixelsinBox_1(N[ii], pixelsPerBoxPerSensor_1, coordSensors, coordPixels, sensorRadius, carDimensions, carRoI, boxDim, plot)
              
+             # Step 4: Sort the obstructed pixels per sensor into different regions
+             sortedObstructedPixelsperSensorinBox_1 = sortObstructedPixelsperSensorinBox_1(N[ii], obstructedPixelsinBox_1, labeledMatrixPixel,labeledPixels,regionOfInterestPerSensor_1, numSquaresperLength, numSquaresperWidth)
              
+             # Step 5: Put weight on pixels depending on obstructed region area 
+             weightedRegionsPerSensor_1 = putWeightonRegions(sortedObstructedPixelsperSensorinBox_1,N[ii])
              
+             # Step 6: Weight the pixels by summing the weights we got from the previous function
+             weightedMap_1 = weightPixels(labeledMatrixPixel,weightedRegionsPerSensor_1,sortedObstructedPixelsperSensorinBox_1,N[ii])
+
+            ################################################################################################
+            
              #########################    REGION OF INTEREST IS THE WHOLE BOX  ############################ 
              
              # Step 1: Find the labels of the obstructed pixels per sensor, for all available sensors in the network   
-             obstructedLabeledPixelsperSensor = findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N[ii], carDimensions, boxDim, plot)
+             obstructedLabeledPixelsperSensor_2 = findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N[ii], carDimensions, boxDim, plot)
                 
              # Step 2: Sort the obstructed pixels per sensor into different regions
-             sortedObstructedPixelsperSensor = sortObstructedPixelPerSensor(labeledMatrixPixel,labeledPixels,obstructedLabeledPixelsperSensor,numSquaresperLength,numSquaresperWidth,N[ii])
+             #sortedObstructedPixelsperSensor_2 = sortObstructedPixelPerSensor(labeledMatrixPixel,labeledPixels,obstructedLabeledPixelsperSensor_2,numSquaresperLength,numSquaresperWidth,N[ii])
                 
-             # Step 3: Put weight on pixels depending on region area
-             weightedRegionsPerSensor = putWeightonRegions(sortedObstructedPixelsperSensor,N[ii])
+             # Step 3: Put weight on pixels depending on obstructed region area
+             #weightedRegionsPerSensor_2 = putWeightonRegions(sortedObstructedPixelsperSensor_2,N[ii])
              
-             # Weight the pixels by summing the weights we got from the previous function
-             weightedMap = weightPixels(labeledMatrixPixel,weightedRegionsPerSensor,sortedObstructedPixelsperSensor,N[ii])
+             #Step 4: Weight the pixels by summing the weights we got from the previous function
+             #weightedMap_2 = weightPixels(labeledMatrixPixel, weightedRegionsPerSensor_2, sortedObstructedPixelsperSensor_2, N[ii])
              
              # Plot the heat map
              if plot == 1:
                  plt.figure()
-                 ax = sns.heatmap(weightedMap)
+                 ax = sns.heatmap(weightedMap_1)
                  plt.savefig(os.path.join(path, 'heat-Weighted-Map.pdf'))
             
             
-             # Step: Divide the map into regions based on different weights
-             regionID, IDmap = divideMapintoRegions(weightedMap, labeledMatrixPixel, labeledPixels, numSquaresperLength, numSquaresperWidth)
+            ################################################################################################
             
+            #########   Compare both approaches  #################################################
+            
+             # Step: Divide the map into regions based on different weights
+             
+             # Technique 1: Region of interest of each vehicle
+             regionID_1, IDmap_1 = divideMapintoRegions(weightedMap_1, labeledMatrixPixel, labeledPixels, numSquaresperLength, numSquaresperWidth)
+             
+             # Technique 2: Region of interest of each vehicle
+             #regionID_2, IDmap_2 = divideMapintoRegions(weightedMap_2, labeledMatrixPixel, labeledPixels, numSquaresperLength, numSquaresperWidth)
             
             
             # Step : Compute the different partitions areas
              #partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedLabeledPixelsperSensor)
              
-             partitionsWeights , allPossibleSets = findPartitionsWeights(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim,obstructedLabeledPixelsperSensor, regionID, weightedMap, IDmap)
+             partitionsWeights_1 , allPossibleSets_1 = findPartitionsWeights(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedPixelsinBox_1, regionID_1, weightedMap_1, IDmap_1)
+#             partitionsWeights_2 , allPossibleSets_2 = findPartitionsWeights(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedLabeledPixelsperSensor_2, regionID_1, weightedMap_1, IDmap_1)
+             partitionsArea_2 , allPossibleSets_2 = findPartitionsAreas(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedLabeledPixelsperSensor_2)
 
 
-                 
+             ##########################   Baseline   ##############################
+             
              #tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[ii]*mu*d), d, partitionsWeights , allPossibleSets, scalingFactor)
-             tempcoverageSensSelec , tempWeightedAgeSensSelec , tempselectedSensorsSensSelec = SensSelecModel(N[ii], d, capacity , mu, weightedMap, partitionsWeights , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam ,thresh = 2.)
-             #tempcoverageSensSelec1 , tempWeightedAgeSensSelec1 , tempselectedSensorsSensSelec1 = SensSelecModel1(N[ii], d, capacity , mu, weightedMap, partitionsWeights , allPossibleSets, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, lam)
+             
+             ##########################  Sensor Selection  ########################
+             # Step 1 - Find the selected sensors for each technique
+             
+             # Technique 1: Region of interest
+             tempselectedSensorsSensSelec_1 = SensSelecModel_1(N[ii], d, capacity , mu, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam ,thresh = 2.)
+             
+             # Technique 2: All box
+             #tempselectedSensorsSensSelec_2 = SensSelecModel_2(N[ii], d, capacity , mu, partitionsArea_2*scalingFactor**2 , allPossibleSets_2, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam ,thresh = 2.)
+
+             # Step 2 - Compute the covered area of the region of interest
+             
+             # Technique 1: Region of interest
+             coverage_1 = computeCoveredAreaOfinterest(tempselectedSensorsSensSelec_1,weightedMap_1,sensorRadius,pixelWidth,pixelLength,labeledMatrixPixel,coordPixels,coordSensors)
+             
+             # Technique 2: Whole box
+             coverage_2 = computeCoveredAreaOfinterest(tempselectedSensorsSensSelec_2,weightedMap_1,sensorRadius)
+             
+             # 3 - Compute the age of the regions of interest
+
              #tempcoverageAreaAgeMin , tempareaWeightedAgeAgeMin , tempselectedSensorsAgeMin = AgeMinModel(N[ii], d, capacity, mu, weightedMap, partitionsWeights , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, lam, thresh = 2.)
              
              if plot2 == 1:
