@@ -865,7 +865,8 @@ def computeWeightedAgeofTypicalSensor(selectedSensors, sensorRadius, coordSensor
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
     lam = d*(1.+2./3.*numSelectedSensors)
-
+    
+    tempCoveredWeights = []
     weightedAgeOfTypicalSensor = 0
     
     for pixel in range(len(obstructedPixelsinBox)):
@@ -878,13 +879,14 @@ def computeWeightedAgeofTypicalSensor(selectedSensors, sensorRadius, coordSensor
                 numSensors += 1
                 
         if numSensors == 0:
-            tempAge = lam    
+            tempAge = 0.   
         else:
+            tempCoveredWeights.append(weight)
             tempAge = d + (1./(numSensors+1.))*(1./ratePerSensor)
         
         weightedAgeOfTypicalSensor += tempAge*weight
         
-    weightedAgeOfTypicalSensor = weightedAgeOfTypicalSensor/np.sum(np.sum(weightedMap))
+    weightedAgeOfTypicalSensor = weightedAgeOfTypicalSensor/np.sum(tempCoveredWeights)
     return weightedAgeOfTypicalSensor
 
 
@@ -980,9 +982,9 @@ def AgeMinModel(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleS
 
 def main(T=int(5e2)): 
     scalingFactor = 1
-    N = np.array([5,7,10]) # number of sensors
+    N = np.array([8,13]) # number of sensors
     lam = 1.
-    sensorRadius = np.array(70/scalingFactor)#coverage radius per sensor
+    sensorRadius = np.array(50/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
     #sensorRadius = np.array([1.,1.,1.,1.,1.,2.,2.,2.,2.,2.])    
     capacity = 1.
@@ -992,7 +994,7 @@ def main(T=int(5e2)):
     plot = 0
     plot2 = 0
     
-    rectangleLength = 300/scalingFactor
+    rectangleLength = 1000/scalingFactor
     rectangleWidth = 12/scalingFactor
     boxDim = np.array([rectangleLength,rectangleWidth])
     areaR = rectangleLength*rectangleWidth*scalingFactor**2
@@ -1041,7 +1043,7 @@ def main(T=int(5e2)):
     coverageTypicalSensorSensSelec_1 = []
     weightedAgeSensSelec_1 = []
 
-    numIter = 20
+    numIter = 1
     
     for ii in tqdm(range(len(N))):
         k = np.arange(1,N[ii]+1,1)
@@ -1081,7 +1083,7 @@ def main(T=int(5e2)):
                             coordSensors = list(coordSensors)
                         else:
                             for mm in range(len(coordSensors)):
-                                if np.linalg.norm(temp_newSensor - coordSensors[mm]) < np.sqrt((carLengthScaled)**2+(carWidthScaled)**2):
+                                if np.linalg.norm(temp_newSensor - coordSensors[mm]) < np.random.poisson(10):#np.sqrt((carLengthScaled)**2+(carWidthScaled)**2):
                                     check = 1
                                     break                        
                             if check == 0:
@@ -1179,8 +1181,8 @@ def main(T=int(5e2)):
     #####################         COVERAGE OF TYPICAL SENSOR  ##########################
     plt.clf()
     plt.plot(np.arange(1,len(coverageTypicalSensorSensSelec_1[0][0])+1) , coverageTypicalSensorSensSelec_1[0][0], '-',label='N='+str(N[0]))
-    plt.plot(np.arange(1,len(coverageTypicalSensorSensSelec_1[1][0])+1) , coverageTypicalSensorSensSelec_1[1][0], '^-',label='N='+str(N[1]))
-    plt.plot(np.arange(1,len(coverageTypicalSensorSensSelec_1[2][0])+1) , coverageTypicalSensorSensSelec_1[2][0], '.-',label='N='+str(N[2]))
+    #plt.plot(np.arange(1,len(coverageTypicalSensorSensSelec_1[1][0])+1) , coverageTypicalSensorSensSelec_1[1][0], '^-',label='N='+str(N[1]))
+    #plt.plot(np.arange(1,len(coverageTypicalSensorSensSelec_1[2][0])+1) , coverageTypicalSensorSensSelec_1[2][0], '.-',label='N='+str(N[2]))
     #plt.plot(N , coverageSensSelec1, '.',label='New Sensor Selection')
     #plt.plot(N , coverageAreaAgeMin, label='Age Minimization')
      #plt.title('Coverage Area as a function of the number of selected sensors', fontsize=12)
@@ -1195,8 +1197,8 @@ def main(T=int(5e2)):
     #####################         Age OF RoI of TYPICAL SENSOR  ##########################
     plt.clf()
     plt.plot(np.arange(1,len(weightedAgeSensSelec_1[0][0])+1)  , weightedAgeSensSelec_1[0][0], '-',label='N='+str(N[0]))
-    plt.plot(np.arange(1,len(weightedAgeSensSelec_1[1][0])+1) , weightedAgeSensSelec_1[1][0], '^-',label='N='+str(N[1]))
-    plt.plot(np.arange(1,len(weightedAgeSensSelec_1[2][0])+1) , weightedAgeSensSelec_1[2][0], '.-',label='N='+str(N[2]))
+    #plt.plot(np.arange(1,len(weightedAgeSensSelec_1[1][0])+1) , weightedAgeSensSelec_1[1][0], '^-',label='N='+str(N[1]))
+    #plt.plot(np.arange(1,len(weightedAgeSensSelec_1[2][0])+1) , weightedAgeSensSelec_1[2][0], '.-',label='N='+str(N[2]))
     #plt.plot(N , coverageSensSelec1, '.',label='New Sensor Selection')
     #plt.plot(N , coverageAreaAgeMin, label='Age Minimization')
      #plt.title('Coverage Area as a function of the number of selected sensors', fontsize=12)
