@@ -12,7 +12,7 @@ from scipy.optimize import brentq
 import os
 from datetime import date
 import seaborn as sns; sns.set()
-
+import scipy.io as sio
 
 
 todayDate = date.today()
@@ -392,6 +392,7 @@ def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensor
 
 def  baselineModel(ratePerSensor , d, partitionsArea , allPossibleSets, scalingFactor):
     areaWeightedAge = 0.
+    ratePerSensor = 10
     coverageArea = np.sum(partitionsArea)
     AgePerPartition = []
     for ii in range(len(partitionsArea)):
@@ -460,12 +461,13 @@ def SensSelecModel(N, d, capacity, mu, partitionsArea , allPossibleSets, rectang
     setofSelectedSensors = []
     setofSensors = np.arange(1,N+1,1)
     
-    k = 6.
+    k = 8.
     #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
     if int(N)>int(k):
        numSelectedSensors = int(k) 
     
-    ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    ratePerSensor = 10
+    #ratePerSensor = capacity/(numSelectedSensors*mu*d)
     lam = d*(1.+2./3.*numSelectedSensors)
     
     new_max = 0.
@@ -496,12 +498,14 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
     setofSelectedSensors = []
     setofSensors = np.arange(1,N+1,1)
     
-    k = 6.
+    k = 8.
     #np.ceil((rectangleLength/sensorRadius)*1.)
     if int(N)>int(k):
        numSelectedSensors = int(k) 
     
-    ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    #ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    
+    ratePerSensor = 10
     lam = d*(1.+2./3.*numSelectedSensors)
     
     new_max = 0.
@@ -553,25 +557,26 @@ def AgeMinModel(N, d, mu, capacity , partitionsArea , allPossibleSets, rectangle
 
 def main(T=int(5e2)): 
     scalingFactor = 1
-    N = np.arange(3,6,1) # number of sensors
+    N = np.arange(2,19,1) # number of sensors
     lam = 1.
-    sensorRadius = np.array(5/scalingFactor)#coverage radius per sensor
+    sensorRadius = np.array(100/scalingFactor)#coverage radius per sensor
     #sensorRadius = []
     #sensorRadius = np.array([1.,1.,1.,1.,1.,2.,2.,2.,2.,2.])    
     capacity = 1.
-    d = 4.2e-3 #transmission delay
+    #d = 4.2e-3 #transmission delay
+    d = 5e-3
     mu = 1. #packet size
     
     
-    plot = 1
+    plot = 0
     
-    rectangleLength = 10/scalingFactor
-    rectangleWidth = 10/scalingFactor
+    rectangleLength = 1000/scalingFactor
+    rectangleWidth = 24/scalingFactor
     boxDim = np.array([rectangleLength,rectangleWidth])
     areaR = rectangleLength*rectangleWidth*scalingFactor**2
     
-    numSquaresperLength = int(rectangleLength*10)
-    numSquaresperWidth = int(rectangleWidth*10)
+    numSquaresperLength = int(rectangleLength)
+    numSquaresperWidth = int(rectangleWidth)
     
     pixelLength = rectangleLength/numSquaresperLength
     pixelWidth = rectangleWidth/numSquaresperWidth
@@ -589,8 +594,8 @@ def main(T=int(5e2)):
             labeledMatrixPixel[ww][ll] = countPixel
             countPixel += 1
     
-    carLength = 1
-    carWidth = 1
+    carLength = 4.48
+    carWidth = 1.83
     carLengthScaled = carLength/scalingFactor
     carWidthScaled = carWidth/scalingFactor
     
@@ -605,7 +610,7 @@ def main(T=int(5e2)):
     areaWeightedAgeAgeMin = []
     selectedSensorsAgeMin = []
 
-    numIter = 1
+    numIter = 2
     
     for ii in tqdm(range(len(N))):
          temp1coverageAreaBaseline = []
@@ -618,32 +623,42 @@ def main(T=int(5e2)):
          temp1selectedSensorsAgeMin =[]
          
          for jj in range(numIter):
+             
+             print('...start')
              #####  We check if the newly generated vehicle doesn't overlap with any previously generated vehicle  ############ 
              nn = 0
              coordSensors = []
              while nn < N[ii]:
                  check = 0
                  temp_x = np.random.rand(1,1)*(rectangleLength-0) 
-                 temp_y = np.random.rand(1,1)*(rectangleWidth-0)
+                 temp_y = rectangleWidth/6/2 + np.random.randint(0,5,(1,1))*rectangleWidth/6
+                 #temp_y = np.random.rand(1,1)*(rectangleWidth-0)
                  
                  temp_newSensor = np.concatenate((temp_x,temp_y),axis=1)
                  # Check first that the new sensor's coordinates have not been previously selected
-                 if temp_newSensor not in np.array(coordSensors):
-                    # Check that the dist between the new sensor and other sensors is at least: sqrt(L^2+W^2)
+                 check1 = 0
+                 for mm in range(len(coordSensors)):
+                    if temp_newSensor[0][0] == coordSensors[mm][0] and temp_newSensor[0][1] == coordSensors[mm][1]:
+                        check1 = 1
+                        break
+                        # Check that the dist between the new sensor and other sensors is at least: sqrt(L^2+W^2)
+                 if check1 == 0: 
                     if not list(coordSensors):
                         coordSensors = np.concatenate((temp_x,temp_y),axis=1)
                         nn += 1
                         coordSensors = list(coordSensors)
                     else:
                         for mm in range(len(coordSensors)):
-                            if np.linalg.norm(temp_newSensor - coordSensors[mm]) < np.sqrt((carLengthScaled)**2+(carWidthScaled)**2):
-                                check = 1
-                                break                        
+                            if temp_newSensor[0][1] == coordSensors[mm][1]:
+                                if np.linalg.norm(temp_newSensor[0][0] - coordSensors[mm][0]) < np.random.poisson(10): #np.sqrt((carLengthScaled)**2+(carWidthScaled)**2):
+                                    check = 1
+                                    break                        
                         if check == 0:
                             coordSensors.append(np.concatenate((temp_x,temp_y),axis=1)[0])   
                             nn += 1
                  
              
+             print('...end')
              
              
 #             xcoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleLength-0) 
@@ -655,19 +670,14 @@ def main(T=int(5e2)):
              obstructedLabeledPixelsperSensor = findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N[ii], carDimensions, boxDim, plot)
                 
              # Step 2: Sort the obstructed pixels per sensor into different regions
-             sortedObstructedPixelsperSensor = sortObstructedPixelPerSensor(labeledMatrixPixel,labeledPixels,obstructedLabeledPixelsperSensor,numSquaresperLength,numSquaresperWidth,N[ii])
+             #sortedObstructedPixelsperSensor = sortObstructedPixelPerSensor(labeledMatrixPixel,labeledPixels,obstructedLabeledPixelsperSensor,numSquaresperLength,numSquaresperWidth,N[ii])
                 
              # Step 3: Put weight on pixels depending on region area
-             weightedRegionsPerSensor = putWeightonRegions(sortedObstructedPixelsperSensor,N[ii])
+             #weightedRegionsPerSensor = putWeightonRegions(sortedObstructedPixelsperSensor,N[ii])
              
              # Weight the pixels by summing the weights we got from the previous function
-             weightedMap = weightPixels(labeledMatrixPixel,weightedRegionsPerSensor,sortedObstructedPixelsperSensor,N[ii])
-             
-             # Plot the heat map
-             if plot == 1:
-                 plt.figure()
-                 ax = sns.heatmap(weightedMap)
-                 plt.savefig(os.path.join(path, 'heatmap.pdf'))
+             #weightedMap = weightPixels(labeledMatrixPixel,weightedRegionsPerSensor,sortedObstructedPixelsperSensor,N[ii])
+
              # Step : Compute the different partitions areas
              partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedLabeledPixelsperSensor)
                  
@@ -714,9 +724,17 @@ def main(T=int(5e2)):
      #plt.title('Area weighted age as a function of the number of selected sensors', fontsize=12)
     plt.legend()
     plt.grid()
+    
       #plt.yscale('log')
     plt.xlabel('Number of available sensors N', fontsize=12)
     plt.ylabel('Normalized average area weighted age [msec]', fontsize=10)
+    
+    sio.savemat('areaWeightedAgeBaseline.mat', {'areaWeightedAgeBaseline':areaWeightedAgeBaseline})
+    sio.savemat('areaWeightedAgeSensSelec.mat', {'areaWeightedAgeSensSelec':areaWeightedAgeSensSelec})
+    sio.savemat('areaWeightedAgeAgeMin.mat', {'areaWeightedAgeAgeMin':areaWeightedAgeAgeMin})
+    
+    
+    
     plt.savefig(os.path.join(path,'Age' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' + '_obstructions_' + '.eps'))
     plt.savefig(os.path.join(path,'Age' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' + '_obstructions_' + '.pdf'))
       
@@ -729,6 +747,12 @@ def main(T=int(5e2)):
     plt.grid()
     plt.xlabel('Number of available sensors N', fontsize=12)
     plt.ylabel('Coverage [%]', fontsize=10)
+    
+    sio.savemat('coverageAreaBaseline.mat', {'coverageAreaBaseline':coverageAreaBaseline})
+    sio.savemat('coverageAreaSensSelec.mat', {'coverageAreaSensSelec':coverageAreaSensSelec})
+    sio.savemat('coverageAreaAgeMin.mat', {'coverageAreaAgeMin':coverageAreaAgeMin})    
+    
+    
     plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' + '_obstructions_' + '.eps'))
     plt.savefig(os.path.join(path,'Coverage' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' + '_obstructions_' +'.pdf'))
 
