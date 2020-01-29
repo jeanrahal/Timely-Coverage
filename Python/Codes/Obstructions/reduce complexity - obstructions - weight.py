@@ -593,10 +593,21 @@ def findPartitionsAreas(pixelLength, pixelWidth, coordPixels,coordSensors,sensor
         temp = np.zeros(2**N-1)
         temp1 = []
         
-    return partitionsPixels*pixelLength*pixelWidth, allPossibleSets
+        
+    partitionsArea = partitionsPixels*pixelLength*pixelWidth
+    
+    
+    # Find indices of non-zero weights
+    idxNonZeroArea = np.nonzero(partitionsArea)
+    
+    # Remove the 0 weights entries from newPartitionWeight, as well as allPossibleSets
+    partitionsArea = partitionsArea[idxNonZeroArea]
+    allPossibleSets = list(np.array(allPossibleSets)[idxNonZeroArea])
+    
+    return partitionsArea, allPossibleSets
 
 
-def findPartitionsWeights(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,labeledPixels,labeledMatrixPixel,N,carDimensions,boxDim,obstructedLabeledPixelsperSensor,regionID,weightedMap,IDmap):
+def findPartitionsWeights(pixelLength, pixelWidth, coordPixels,coordSensors,sensorRadius,labeledPixels,labeledMatrixPixel,N,carDimensions,boxDim,obstructedLabeledPixelsperSensor,weightedMap):
     tempPartitionsPixels = np.zeros(2**N-1)
     partitionsPixels = np.zeros(2**N-1)
     temp = np.zeros(2**N-1)
@@ -629,13 +640,20 @@ def findPartitionsWeights(pixelLength, pixelWidth, coordPixels,coordSensors,sens
             else:
                 temp = tempPartitionsPixels*weightPixel
                 
-            partitionsPixels = partitionsPixels + temp
+            partitionsPixels += temp
             
             tempPartitionsPixels = np.zeros(2**N-1)
             temp = np.zeros(2**N-1)
             temp1 = []
     
     partitionsWeights = partitionsPixels
+        
+    # Find indices of non-zero weights
+    idxNonZeroWeight = np.nonzero(partitionsWeights)
+    
+    # Remove the 0 weights entries from newPartitionWeight, as well as allPossibleSets
+    partitionsWeights = partitionsWeights[idxNonZeroWeight]
+    allPossibleSets = list(np.array(allPossibleSets)[idxNonZeroWeight])
     
     return partitionsWeights, allPossibleSets
 
@@ -661,8 +679,10 @@ def compute_b_1(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,
     b = 0.
     AgePerPartition = []
     coveredWeight = []
-    tempP = np.zeros(2**N-1)
-    newPartitionWeight = np.zeros(2**N-1)
+    tempP = np.zeros(len(partitionsWeight))
+    newPartitionWeight = np.zeros(len(partitionsWeight))
+    
+    startTime = time.time()
     if not setofSelectedSensors:
         currSensors = np.array(currSensor)
         for ii in range(len(partitionsWeight)):
@@ -678,8 +698,20 @@ def compute_b_1(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,
                     tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
                     newPartitionWeight[ii] = partitionsWeight[ii]                    
                 
-                
-    for ii in range(len(partitionsWeight)):
+    
+    endTime = time.time()
+    #print("--- %s seconds : Sens select 1: Compute new partitions' weights" % (endTime - startTime))    
+    
+    # Find indices of non-zero weights
+    idxNonZeroWeight = np.nonzero(newPartitionWeight)
+    
+    # Remove the 0 weights entries from newPartitionWeight, as well as allPossibleSets
+    newPartitionWeight = newPartitionWeight[idxNonZeroWeight]
+    tempP = tempP[idxNonZeroWeight]    
+    
+    
+    startTime = time.time()
+    for ii in range(len(newPartitionWeight)):
         n = tempP[ii]
         if n!=0:
             tempAge = d + (1./(n+1.))*(1./ratePerSensor) 
@@ -702,6 +734,10 @@ def compute_b_1(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,
     b = a_empty-a
     
     percentageCoveredWeight = totalCoveredWeight/np.sum(np.sum(weightedMap))*100.
+    
+    endTime = time.time()
+    
+    #print("--- %s seconds : Sens Select 1: Compute b" % (endTime - startTime))
     
     return b, percentageCoveredWeight , weightedAge/totalCoveredWeight , selectedPartitionsArea
 
@@ -727,8 +763,15 @@ def compute_b_2(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors ,ra
                     tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
                     newPartitionArea[ii] = partitionsArea[ii]                    
                 
+    # Find indices of non-zero weights
+    idxNonZeroWeight = np.nonzero(newPartitionArea)
+    
+    # Remove the 0 weights entries from newPartitionWeight, as well as allPossibleSets
+    newPartitionArea = newPartitionArea[idxNonZeroWeight]
+    tempP = tempP[idxNonZeroWeight]   
+
                 
-    for ii in range(len(partitionsArea)):
+    for ii in range(len(newPartitionArea)):
         n = tempP[ii]
         if n!=0:
             tempAge = d + (1./(n+1.))*(1./ratePerSensor) 
@@ -771,16 +814,39 @@ def SensSelecModel_1(N, d, capacity, mu, weightedMap, partitionsWeight , allPoss
     
     new_max = 0.
     temp_b_old = 0.
+    
+    eps = 0.1
     for ii in range(int(numSelectedSensors)):
         b_old = temp_b_old
         new_max = 0.
-        for jj in range(N):
-            if jj not in setofSelectedSensors:
-                b_new, temp_percentageCoveredWeight , temp_weightedAge , selectedPartitionsArea = compute_b_1(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors, ratePerSensor, jj, allPossibleSets,weightedMap, lam)
+        
+        #### Apply Stochastic Greedy ++ from : deVeciana, Abolfazl, Vikalo paper
+        # Step 1: Determine how many sensors to sample from the set of available sensors 
+        if ii < int(k - np.log(1./eps)):
+            r_i = int((N-ii)/(k-ii)*np.log(1./eps))
+        else:
+            r_i = N-ii
+        
+        # Step 2: Randomly select r_i sensors
+        idxOfRandomGeneratedSensors = []
+        qq = 0
+        print('start')
+        while qq < (r_i):
+            tempPickedIdx = np.random.randint(0,N) #Generate numbers within the range [0,N-ii]
+            if tempPickedIdx not in idxOfRandomGeneratedSensors and setofSensors[tempPickedIdx] not in setofSelectedSensors: #Check that the newly generated number hasn't been already picked. If not, add it to the list AND that the newly picked sensor wasn't previously picked
+                qq += 1
+                idxOfRandomGeneratedSensors.append(tempPickedIdx)
+     
+        setOfRandomGeneratedSensors = setofSensors[idxOfRandomGeneratedSensors]
+        print('end')
+        
+        for jj in range(len(setOfRandomGeneratedSensors)):
+            if setOfRandomGeneratedSensors[jj] not in setofSelectedSensors:
+                b_new, temp_percentageCoveredWeight , temp_weightedAge , selectedPartitionsArea = compute_b_1(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors, ratePerSensor, setOfRandomGeneratedSensors[jj], allPossibleSets,weightedMap, lam)
                 if np.abs(b_new - b_old) >= new_max:
                     new_max = (b_new - b_old)
                     temp_b_old = b_new
-                    selectedSensor = jj
+                    selectedSensor = setOfRandomGeneratedSensors[jj]
                     coverageWeight = temp_percentageCoveredWeight
                     weightedAge = temp_weightedAge 
         setofSelectedSensors.append(selectedSensor)
@@ -809,16 +875,35 @@ def SensSelecModel_2(N, d, capacity, mu, partitionsArea , allPossibleSets, recta
     
     new_max = 0.
     temp_b_old = 0.
+    
+    eps = 0.1
     for ii in range(int(numSelectedSensors)):
         b_old = temp_b_old
         new_max = 0.
-        for jj in range(N):
-            if jj not in setofSelectedSensors:
-                b_new, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b_2(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, ratePerSensor, jj, allPossibleSets, lam)
+        
+        #### Apply Stochastic Greedy ++ from : deVeciana, Abolfazl, Vikalo paper
+        # Step 1: Determine how many sensors to sample from the set of available sensors 
+        if ii < int(k - np.log(1./eps))-1:
+            r_i = int(N/(k-ii)*np.log(1./eps))
+        else:
+            r_i = N-ii
+        
+        # Step 2: Randomly select r_i sensors
+        idxOfRandomGeneratedSensors = []
+        for qq in range(r_i):
+            tempPickedIdx = np.random.randint(0,N) #Generate numbers within the range [0,N-ii]
+            if tempPickedIdx not in idxOfRandomGeneratedSensors: #Check that the newly generated number hasn't been already picked. If not, add it to the list
+                idxOfRandomGeneratedSensors.append(tempPickedIdx)
+     
+        setOfRandomGeneratedSensors = setofSensors[idxOfRandomGeneratedSensors]
+        
+        for jj in range(len(setOfRandomGeneratedSensors)):
+            if setOfRandomGeneratedSensors[jj] not in setofSelectedSensors:
+                b_new, tempcoverageArea, tempareaWeightedAge, selectedPartitionsArea = compute_b_2(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors, ratePerSensor, setOfRandomGeneratedSensors[jj], allPossibleSets, lam)
                 if np.abs(b_new - b_old) >= new_max:
                     new_max = (b_new - b_old)
                     temp_b_old = b_new
-                    selectedSensor = jj
+                    selectedSensor = setOfRandomGeneratedSensors[jj]
                     coverageArea = tempcoverageArea
                     areaWeightedAge = tempareaWeightedAge
         setofSelectedSensors.append(selectedSensor)
@@ -878,46 +963,6 @@ def computeCoveredAreaofObstructedRegionTypicalSensor(selectedSensors, sensorRad
     return coverageOfObstructedRegionofTypicalSensor
 
 
-
-#def computeWeightedAgeofTypicalSensor(selectedSensors, sensorRadius, coordSensors, coordPixels, pixelsPerBoxPerSensor, obstructedPixelsinBox, labeledMatrixPixel, weightedMap, weightedRegionsPerSensor, lam, d, N, capacity, mu, k):
-#    #totalWeight = np.sum(weightedMap)
-#    totalWeight = 0.
-#    
-#    numSelectedSensors = N
-#    if int(N)>int(k):
-#       numSelectedSensors = int(k) 
-#    
-#    ratePerSensor = capacity/(numSelectedSensors*mu*d)
-#    #lam = d*(1.+2./3.*numSelectedSensors)
-#    lam = d*(1.+2./3.*20)
-#    
-#    weightedAgeOfTypicalSensor = 0
-#    #tempCoveredWeights = []
-#    
-#    for pixel in range(len(obstructedPixelsinBox)):
-#        obstructedPixel = obstructedPixelsinBox[pixel]
-#        #index = np.where(labeledMatrixPixel == obstructedPixel)
-#        #weight = weightedMap[index[0][0]][index[1][0]]
-#        totalWeight += weightedRegionsPerSensor
-#        
-#        numSensors = 0
-#        for sensor in range(len(selectedSensors)):
-#            if pixelisInCircle(selectedSensors[sensor],sensorRadius,int(obstructedPixel),coordPixels,coordSensors):
-#                numSensors += 1
-#                
-#        if numSensors == 0:
-#            tempAge = lam    
-#        else:
-#            #tempCoveredWeights.append(weight)
-#            tempAge = d + (1./(numSensors+1.))*(1./ratePerSensor)
-#            
-#        weightedAgeOfTypicalSensor += tempAge*weightedRegionsPerSensor
-#        
-#        
-#    weightedAgeOfTypicalSensor = weightedAgeOfTypicalSensor/totalWeight
-#    return weightedAgeOfTypicalSensor
-
-
 def computeWeightedAgeofTypicalSensor_1(selectedSensors, sensorRadius, coordSensors, coordPixels, pixelsPerBoxPerSensor, obstructedPixelsinBox, labeledMatrixPixel, weightedMap, weightedRegionsPerSensor, lam, d, N, capacity, mu, k):
     #totalWeight = np.sum(weightedMap)
     totalWeight = 0.
@@ -958,54 +1003,6 @@ def computeWeightedAgeofTypicalSensor_1(selectedSensors, sensorRadius, coordSens
     weightedAgeOfTypicalSensor = weightedAgeOfTypicalSensor/totalWeight
     return weightedAgeOfTypicalSensor
 
-
-
-
-#def computeWeightedAgeofTypicalSensor_AgeMin(selectedSensors, sensorRadius, coordSensors, coordPixels, pixelsPerBoxPerSensor,obstructedPixelsinBox, labeledMatrixPixel, weightedMap, weightedRegionsPerSensor, lam, d, N, capacity, mu, ratesofselectedSensorsAgeMin, k):
-## =============================================================================
-##     numSelectedSensors = N
-##     if int(N)>int(k):
-##        numSelectedSensors = int(k) 
-## =============================================================================
-#    
-#    #ratePerSensor = capacity/(numSelectedSensors*mu*d)
-#    #lam = d*(1.+2./3.*numSelectedSensors)
-#    
-#    totalWeight = 0.
-#    lam = d*(1.+2./3.*20)
-#    
-#    weightedMinAgeOfTypicalSensor = 0
-#    #tempCoveredWeights = []
-#    
-#    selectedSensors = np.sort(selectedSensors)
-#    
-#    for pixel in range(len(obstructedPixelsinBox)):
-#        obstructedPixel = obstructedPixelsinBox[pixel]
-#        #index = np.where(labeledMatrixPixel == obstructedPixel)
-#        #weight = weightedMap[index[0][0]][index[1][0]]
-#        
-#        totalWeight += weightedRegionsPerSensor
-#        selectedRates = []
-#        numSensors = 0
-#        for sensor in range(len(selectedSensors)):
-#            if pixelisInCircle(selectedSensors[sensor],sensorRadius,int(obstructedPixel),coordPixels,coordSensors):
-#                selectedRates.append(ratesofselectedSensorsAgeMin[sensor])
-#                numSensors += 1
-#                
-#        if numSensors == 0:
-#            tempAge = lam
-#        else:
-#            r_max = max(selectedRates)
-#            result = quad(return_zj(selectedRates,d), d, d + 1./r_max)
-#            tempAge = d+result[0]
-#            #tempCoveredWeights.append(weight)
-#        
-#        weightedMinAgeOfTypicalSensor += tempAge*weightedRegionsPerSensor
-#        
-#    weightedMinAgeOfTypicalSensor = weightedMinAgeOfTypicalSensor/totalWeight
-#    
-#    
-#    return weightedMinAgeOfTypicalSensor
     
     
 def computeWeightedAgeofTypicalSensor_AgeMin_1(selectedSensors, sensorRadius, coordSensors, coordPixels, pixelsPerBoxPerSensor,obstructedPixelsinBox, labeledMatrixPixel, weightedMap, weightedRegionsPerSensor, lam, d, N, capacity, mu, ratesofselectedSensorsAgeMin, k):
@@ -1117,7 +1114,7 @@ def AgeMinModel_1(N, d, capacity, mu, setofSelectedSensors, weightedMap, partiti
         if temp:
             #temp = np.sort(temp)
             idx = newallPossibleSets.index(temp)
-            newselectedPartitionsWeight[idx] = newselectedPartitionsWeight[idx] + partitionsWeight[ii]    
+            newselectedPartitionsWeight[idx] += partitionsWeight[ii]    
             
     # Compute new rate allocation and new ageWeightedArea
     rate_fw_agemin, obj_fn, l1_fw_agemin = descent(N,frank_wolfe, d, numSelectedSensors, setofSelectedSensors, newallPossibleSets, np.array(newselectedPartitionsWeight), capacity/(mu*d), T=T)
@@ -1129,8 +1126,8 @@ def AgeMinModel_1(N, d, capacity, mu, setofSelectedSensors, weightedMap, partiti
 def main(T=int(5e2)): 
     scalingFactor = 1
     scale = 1
-    N = np.arange(8,19) # number of sensors
-    k = 8
+    N = np.arange(14,15) # number of sensors
+    k = 14
     lam = 1.
     sensorRadius = np.array(50/scalingFactor)/scale#coverage radius per sensor
     #sensorRadius = []
@@ -1172,55 +1169,7 @@ def main(T=int(5e2)):
     numSquaresperLength = int(rectangleLength)
     numSquaresperWidth =  int(rectangleWidth)
 
-    
-    
-###################   Original  ###################################################################    
-#    scalingFactor = 1
-#    N = np.arange(9,15,1) # number of sensors
-#    k = 9
-#    lam = 1.
-#    sensorRadius = np.array(100/scalingFactor)#coverage radius per sensor
-#    #sensorRadius = []
-#    #sensorRadius = np.array([1.,1.,1.,1.,1.,2.,2.,2.,2.,2.])    
-#    capacity = 1.
-#    d = 4.2e-3 # transmission delay
-#    mu = 1. # packet size 
-#    
-#    plot = 0
-#    plot2 = 0
-#    
-#    rectangleLength = 1000/scalingFactor
-#    rectangleWidth = 24/scalingFactor
-#    boxDim = np.array([rectangleLength,rectangleWidth])
-#    areaR = rectangleLength*rectangleWidth*scalingFactor**2
-#
-#
-#    #### Region of interest of car  #####
-#    
-#    t_interest = 6 #seconds
-#    #speed = 50./3 # 60 km/hour
-#    speed = 19.44
-#    
-#    length_box_per_car = 2*t_interest*speed
-#    #length_box_per_car = 300.
-#    width_box_per_car = rectangleWidth
-#    carRoI = np.array([length_box_per_car,width_box_per_car])
-#    
-#    carLength = 4.48
-#    carWidth = 1.83
-#    carLengthScaled = carLength/scalingFactor
-#    carWidthScaled = carWidth/scalingFactor
-#    
-#    inter_car_dist = 10
-#    carDimensions = np.array([carLength,carWidth])/scalingFactor # Length X Width
-#
-#    
-#    numSquaresperLength = int(rectangleLength)
-#    numSquaresperWidth =  int(rectangleWidth)
-#    
- 
-    ######################################################################
-    
+        
     pixelLength = rectangleLength/numSquaresperLength
     pixelWidth = rectangleWidth/numSquaresperWidth
     
@@ -1277,7 +1226,7 @@ def main(T=int(5e2)):
     stdweightedAgeSensSelec_2 = []  
 
 
-    numIter = 3
+    numIter = 1
     
     for ii in tqdm(range(len(N))):
          
@@ -1347,6 +1296,7 @@ def main(T=int(5e2)):
              
              #########################     PER SENSOR REGION OF INTEREST      ##############################
              
+             startTime = time.time()
              # Step 1: Find 4 corners of box of region of interest per car
              regionOfInterestPerSensor_1 = findCoordregionOfInterestPerSensor_1(coordPixels,coordSensors,N[ii],length_box_per_car,width_box_per_car,boxDim)
              
@@ -1364,14 +1314,20 @@ def main(T=int(5e2)):
              
              # Step 6: Weight the pixels by summing the weights we got from the previous function
              weightedMap_1 = weightPixels(labeledMatrixPixel,weightedRegionsPerSensor_1,sortedObstructedPixelsperSensorinBox_1,N[ii])
+             
+             endTime = time.time()
+
+             print("--- %s seconds : Per sensor region of interest" % (endTime - startTime))
 
             ################################################################################################
             
              #########################    REGION OF INTEREST IS THE WHOLE BOX  ############################ 
-             
+             startTime = time.time()
              # Step 1: Find the labels of the obstructed pixels per sensor, for all available sensors in the network   
              obstructedLabeledPixelsperSensor_2 = findObstructions(coordPixels, coordSensors, sensorRadius, labeledPixels, N[ii], carDimensions, boxDim, plot)
                 
+             endTime = time.time()
+             print("--- %s seconds : Obstructions" % (endTime - startTime))
              # Step 2: Sort the obstructed pixels per sensor into different regions
              #sortedObstructedPixelsperSensor_2 = sortObstructedPixelPerSensor(labeledMatrixPixel,labeledPixels,obstructedLabeledPixelsperSensor_2,numSquaresperLength,numSquaresperWidth,N[ii])
                 
@@ -1394,7 +1350,7 @@ def main(T=int(5e2)):
              # Step: Divide the map into regions based on different weights
              
              # Technique 1: Region of interest of each vehicle
-             regionID_1, IDmap_1 = divideMapintoRegions(weightedMap_1, labeledMatrixPixel, labeledPixels, numSquaresperLength, numSquaresperWidth)
+             #regionID_1, IDmap_1 = divideMapintoRegions(weightedMap_1, labeledMatrixPixel, labeledPixels, numSquaresperLength, numSquaresperWidth)
              
              # Technique 2: Region of interest of each vehicle
              #regionID_2, IDmap_2 = divideMapintoRegions(weightedMap_2, labeledMatrixPixel, labeledPixels, numSquaresperLength, numSquaresperWidth)
@@ -1402,10 +1358,16 @@ def main(T=int(5e2)):
             # Step : Compute the different partitions areas
              #partitionsArea , allPossibleSets = findPartitionsAreas(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedLabeledPixelsperSensor)
              
-             partitionsWeights_1 , allPossibleSets_1 = findPartitionsWeights(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedPixelsinBox_1, regionID_1, weightedMap_1, IDmap_1)
+             startTime = time.time()
+             partitionsWeights_1 , allPossibleSets_1 = findPartitionsWeights(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedPixelsinBox_1, weightedMap_1)
 #             partitionsWeights_2 , allPossibleSets_2 = findPartitionsWeights(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedLabeledPixelsperSensor_2, regionID_1, weightedMap_1, IDmap_1)
+             endTime = time.time()
+             print("--- %s seconds : Partitions Weight" % (endTime - startTime))
+             
+             startTime = time.time()
              partitionsArea_2 , allPossibleSets_2 = findPartitionsAreas(pixelLength, pixelWidth, coordPixels, coordSensors, sensorRadius, labeledPixels, labeledMatrixPixel, N[ii], carDimensions, boxDim, obstructedLabeledPixelsperSensor_2)
-
+             endTime = time.time()
+             print("--- %s seconds : Partitions Area" % (endTime - startTime))
              ##########################   Baseline   ##############################
              
              #tempcoverageAreaBaseline , tempareaWeightedAgeBaseline = baselineModel(capacity/(N[ii]*mu*d), d, partitionsArea_2 , allPossibleSets_2, scalingFactor)
@@ -1415,12 +1377,21 @@ def main(T=int(5e2)):
              
              # Technique 1: Region of interest
              # a - No age minimization
+             startTime = time.time()             
              tempselectedSensorsSensSelec_1 = SensSelecModel_1(N[ii], d, capacity , mu, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam, k,thresh = 2.)
+             endTime = time.time()
+             print("--- %s seconds : Sens Select 1" % (endTime - startTime))
+             
+             startTime = time.time()
              tempRatesofselectedSensorsAgeMin_1 = AgeMinModel_1(N[ii], d, capacity, mu, tempselectedSensorsSensSelec_1, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, lam, k, thresh = 2.)
+             endTime = time.time()
+             print("--- %s seconds : Age minimization" % (endTime - startTime))
              
              # Technique 2: All box
+             startTime = time.time()
              tempselectedSensorsSensSelec_2 = SensSelecModel_2(N[ii], d, capacity , mu, partitionsArea_2*scalingFactor**2 , allPossibleSets_2, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam, k, thresh = 2.)
-
+             endTime = time.time()
+             print("--- %s seconds : Sens Select 2" % (endTime - startTime))
              # Step 2 - Compute the covered area of the region of interest
              
 # =============================================================================
@@ -1445,6 +1416,8 @@ def main(T=int(5e2)):
              temp2weightedAgeTypicalSensorAgeMin_1 = []
              temp2coverageTypicalSensor_2 = []
              temp2weightedAgeTypicalSensor_2 = []
+             
+             startTime = time.time()
              
              num = N[ii]
              for mm in range(num):
@@ -1501,6 +1474,9 @@ def main(T=int(5e2)):
              coverageTypicalSensor_2 = np.sum(temp2coverageTypicalSensor_2)/num
              weightedAgeTypicalSensor_2 = np.sum(temp2weightedAgeTypicalSensor_2)/num
              
+             
+             endTime = time.time()
+             print("--- %s seconds : Age-Cov computations" % (endTime - startTime))
              
              # 3 - Compute the age of the regions of interest
 
