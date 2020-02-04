@@ -221,20 +221,50 @@ def plotObstructions(coordPixels, coordSensors, carsCoords, carDimensions, obstr
 
 
 #################     PER CAR REGION OF INTEREST   ###########################
-def findCoordregionOfInterestPerSensor_1(coordPixels,coordSensors,N,length_box_per_car,width_box_per_car,boxDim):
+def findCoordregionOfInterestPerSensor_1(coordPixels,coordSensors,sensors_road_lane,N,length_box_per_car,width_box_per_car,boxDim,numLanes_road1,numLanes_road2,unwantedPixelsCorners1, pixelLength, pixelWidth):
     coordRegionofInterest = []
     
+    # Split this section into 2 parts:
+    # 1- The typical rectangular box for each vehicle
+    # 2- For some of the sensors (as will be specified below), add some additional region of interest
+        
     for car in range(N):
-        a = coordSensors[car][0]+length_box_per_car/2
-        b = coordSensors[car][1]+width_box_per_car
-        c = coordSensors[car][1]-width_box_per_car
-        d = coordSensors[car][0]-length_box_per_car/2
-        
-        coordRegionofInterest.append([[a if a<= boxDim[0] else boxDim[0], b if b<= boxDim[1] else boxDim[1]],
-                                      [a if a<= boxDim[0] else boxDim[0], c if c>= 0 else 0],
-                                      [d if d>= 0 else 0, b if b<= boxDim[1] else boxDim[1]],
-                                      [d if d>= 0 else 0, c if c>= 0 else 0]])
-        
+        # Step 1: check on which road does the car fall 
+        # If car falls on 1st road
+        if sensors_road_lane[car][0] == 1: 
+            a = coordSensors[car][0]+length_box_per_car[0]/2/pixelLength
+            b = coordSensors[car][1]+width_box_per_car[0]/pixelWidth
+            c = coordSensors[car][1]-width_box_per_car[0]/pixelWidth
+            d = coordSensors[car][0]-length_box_per_car[0]/2/pixelLength
+            
+            coordRegionofInterest.append([[a if a<= boxDim[0]/pixelLength else boxDim[0]/pixelLength, b if b<= (boxDim[1]/pixelWidth-unwantedPixelsCorners1[3][1]) else (boxDim[1]/pixelWidth-unwantedPixelsCorners1[3][1])],
+                                          [a if a<= boxDim[0]/pixelLength else boxDim[0]/pixelLength, c if c>= (boxDim[1]/pixelWidth-unwantedPixelsCorners1[3][1] - width_box_per_car[0]/pixelWidth) else (boxDim[1]/pixelWidth-unwantedPixelsCorners1[3][1] - width_box_per_car[0]/pixelWidth)],
+                                          [d if d>= 0 else 0, b if b<= (boxDim[1]/pixelWidth-unwantedPixelsCorners1[3][1]) else (boxDim[1]/pixelWidth-unwantedPixelsCorners1[3][1])],
+                                          [d if d>= 0 else 0, c if c>= (boxDim[1]/pixelWidth-unwantedPixelsCorners1[3][1] - width_box_per_car[0]/pixelWidth) else (boxDim[1]/pixelWidth - unwantedPixelsCorners1[3][1] - width_box_per_car[0]/pixelWidth)]])
+    
+            # Next check the lane on which it falls, and add special regions for the extreme lanes
+            # If car falls on first lane
+            if sensors_road_lane[car][1] == 0 :
+                hizi = 0
+            # If car falls on last lane    
+            elif sensors_road_lane[car][1] == numLanes_road1 - 1:
+                hizi = 0
+        # If car falls on 2nd road
+        elif sensors_road_lane[car][0] == 2:
+            a = coordSensors[car][0]+width_box_per_car[0]/pixelLength
+            b = coordSensors[car][1]+length_box_per_car[0]/2/pixelWidth
+            c = coordSensors[car][1]-length_box_per_car[0]/2/pixelWidth
+            d = coordSensors[car][0]-width_box_per_car[0]/pixelLength
+            
+            coordRegionofInterest.append([[a if a<= (unwantedPixelsCorners1[1][0] + width_box_per_car[1]/pixelWidth) else (unwantedPixelsCorners1[1][0] + width_box_per_car[1]/pixelWidth), c if c>= 0 else 0],
+                                          [d if d>= unwantedPixelsCorners1[1][0] else unwantedPixelsCorners1[1][0], c if c>= 0 else 0],
+                                          [a if a<= (unwantedPixelsCorners1[1][0] + width_box_per_car[1]/pixelWidth) else (unwantedPixelsCorners1[1][0] + width_box_per_car[1]/pixelWidth), b if b<= boxDim[1]/pixelWidth else boxDim[1]/pixelWidth],
+                                          [d if d>= unwantedPixelsCorners1[1][0] else unwantedPixelsCorners1[1][0], b if b<= boxDim[1]/pixelWidth else boxDim[1]/pixelWidth]])
+            
+            if sensors_road_lane[car][1] == numLanes_road2 - 1:
+                hizi = 0
+ 
+    
     return coordRegionofInterest
     
 
@@ -1288,10 +1318,10 @@ def main(T=int(5e2)):
     startTotalTime = time.time()
     scalingFactor = 1
     scale = 1
-    N = np.arange(8,25) # number of sensors
-    k = 8
+    N = np.arange(4,5) # number of sensors
+    k = 4
     lam = 1.
-    sensorRadius = np.array(50/scalingFactor)/scale#coverage radius per sensor
+    sensorRadius = np.array(100/scalingFactor)/scale#coverage radius per sensor
     #sensorRadius = []
     #sensorRadius = np.array([1.,1.,1.,1.,1.,2.,2.,2.,2.,2.])    
     capacity = 1.
@@ -1301,22 +1331,155 @@ def main(T=int(5e2)):
     plot = 0
     plot2 = 0
     
-    rectangleLength = 500/scalingFactor#/scale
-    rectangleWidth = 12/scalingFactor#/scale
-    numLanes = 3
-    boxDim = np.array([rectangleLength,rectangleWidth])
-    areaR = rectangleLength*rectangleWidth*scalingFactor**2
 
+    ######################3    Design 2   #############################
+    # Step 1: Build big box
+    rectangleLength = 1000
+    rectangleWidth = 1000
+    boxDim = np.array([rectangleLength,rectangleWidth])    
+    
+    numSquaresperLength = int(rectangleLength/5)
+    numSquaresperWidth =  int(rectangleWidth/5)
 
+    pixelLength = int(rectangleLength/numSquaresperLength)
+    pixelWidth = int(rectangleWidth/numSquaresperWidth)
+    
+    xPosCenterPixel1 = int(pixelLength/2)
+    yPosCenterPixel1 = int(pixelWidth/2)
+    
+    coordPixels = generatePixelsCenters(xPosCenterPixel1, yPosCenterPixel1, pixelLength, pixelWidth, numSquaresperLength, numSquaresperWidth)    
+    
+    
+    # Step 2: Dig roads intersection
+    road1Length = rectangleLength
+    road1Width = 24
+    
+    road2Length = rectangleWidth
+    road2Width = 12
+    
+    numLanes_road1 = 6
+    numLanes_road2 = 3
+    
+    inter_car_dist = 10
+    #inter_car_dist_road1 = 10
+    #inter_car_dist_road2 = 5
+    
+    # Intersection info
+    intersectionLength = road2Width
+    intersectionWidth = road1Width
+    
+    intersectionCenter = np.array([rectangleLength/2,rectangleWidth/2])
+    
+    # Label the pixels that we will use, and set the rest to -1
+    # 1 - Select the pixels we will not add to the labeledPixelsMatrix
+    
+    countUnwantedPixels = 0
+    
+    # Upper left rectangle
+    unwantedPixelsCorners1 = []
+    
+    unwantedPixelsCorners1.append([0 , 0])   # Corner 1
+    unwantedPixelsCorners1.append([intersectionCenter[0]-intersectionLength/2, 0]) # Corner 2
+    unwantedPixelsCorners1.append([intersectionCenter[0]-intersectionLength/2, intersectionCenter[1]-intersectionWidth/2])  # Corner 3
+    unwantedPixelsCorners1.append([0 , intersectionCenter[1]-intersectionWidth/2])    # Corner 4
+    
+    unwantedPixelsCorners1 = np.divide(unwantedPixelsCorners1,[pixelLength,pixelWidth])
+    
+    # Upper right rectangle
+    unwantedPixelsCorners2 = []
+    
+    unwantedPixelsCorners2.append([intersectionCenter[0]+intersectionLength/2, 0])   # Corner 1
+    unwantedPixelsCorners2.append([rectangleLength , 0]) # Corner 2
+    unwantedPixelsCorners2.append([rectangleLength , intersectionCenter[1]-intersectionWidth/2])  # Corner 3
+    unwantedPixelsCorners2.append([intersectionCenter[0]+intersectionLength/2 , intersectionCenter[1]-intersectionWidth/2])    # Corner 4
+
+    unwantedPixelsCorners2 = np.divide(unwantedPixelsCorners2,[pixelLength,pixelWidth])
+
+    # Lower left rectangle
+    unwantedPixelsCorners3 = []
+    
+    unwantedPixelsCorners3.append([0 , intersectionCenter[1]+intersectionWidth/2])   # Corner 1
+    unwantedPixelsCorners3.append([intersectionCenter[0]-intersectionLength/2 , intersectionCenter[1]+intersectionWidth/2]) # Corner 2
+    unwantedPixelsCorners3.append([intersectionCenter[0]-intersectionLength/2 , rectangleWidth])  # Corner 3
+    unwantedPixelsCorners3.append([0 , rectangleWidth])    # Corner 4
+  
+    unwantedPixelsCorners3 = np.divide(unwantedPixelsCorners3,[pixelLength,pixelWidth])
+    
+    # Lower right rectangle
+    unwantedPixelsCorners4 = []
+    
+    unwantedPixelsCorners4.append([intersectionCenter[0]+intersectionLength/2 , intersectionCenter[1]+intersectionWidth/2])   # Corner 1
+    unwantedPixelsCorners4.append([rectangleLength , intersectionCenter[1]+intersectionWidth/2]) # Corner 2
+    unwantedPixelsCorners4.append([rectangleLength , rectangleWidth])  # Corner 3
+    unwantedPixelsCorners4.append([intersectionCenter[0]+intersectionLength/2 , rectangleWidth])    # Corner 4
+
+    unwantedPixelsCorners4 = np.divide(unwantedPixelsCorners4,[pixelLength,pixelWidth])
+
+    # Store indices of unwanted pixels
+    unwantedRectangleLength = unwantedPixelsCorners1[1][0]
+    unwantedRectangleWidth = unwantedPixelsCorners1[3][1]
+    
+    # Initialize unwanted rectangles
+    unwantedPixelsRect1 = []
+    unwantedPixelsRect2 = []
+    unwantedPixelsRect3 = []
+    unwantedPixelsRect4 = []
+
+    # Create the labeled matrix
+    labeledMatrixPixel = np.zeros((numSquaresperWidth,numSquaresperLength))
+    labeledPixels = []
+    countPixel = 0
+    countAllPixels = 0
+    
+    for ww in range(numSquaresperWidth):
+        for ll in range(numSquaresperLength):
+            # Unwanted Rect 1
+            if ( (ll >= unwantedPixelsCorners1[0][0] and ll <= unwantedPixelsCorners1[1][0]-1 
+            and ww >= unwantedPixelsCorners1[0][1] and ww <= unwantedPixelsCorners1[2][1]-1 ) ):
+                unwantedPixelsRect1.append([ll,ww])
+                labeledMatrixPixel[ww][ll] = -1
+                countAllPixels += 1
+                
+            # Unwanted Rect 2
+            elif ( (ll >= unwantedPixelsCorners2[0][0] and ll <= unwantedPixelsCorners2[1][0] 
+            and ww >= unwantedPixelsCorners2[0][1] and ww <= unwantedPixelsCorners2[2][1]) ):
+                unwantedPixelsRect2.append([ll,ww])
+                labeledMatrixPixel[ww][ll] = -1
+                countAllPixels += 1
+
+            # Unwanted Rect 3
+            elif ( (ll >= unwantedPixelsCorners3[0][0] and ll <= unwantedPixelsCorners3[1][0] 
+            and ww >= unwantedPixelsCorners3[0][1] and ww <= unwantedPixelsCorners3[2][1]) ):
+                unwantedPixelsRect3.append([ll,ww])
+                labeledMatrixPixel[ww][ll] = -1
+                countAllPixels += 1
+                
+            # Unwanted Rect 4
+            elif ( (ll >= unwantedPixelsCorners4[0][0] and ll <= unwantedPixelsCorners4[1][0] 
+            and ww >= unwantedPixelsCorners4[0][1] and ww <= unwantedPixelsCorners4[2][1]) ):
+                unwantedPixelsRect4.append([ll,ww])    
+                labeledMatrixPixel[ww][ll] = -1
+                countAllPixels += 1
+                
+            else:
+                labeledMatrixPixel[ww][ll] = countPixel
+                labeledPixels.append(countAllPixels)
+                countPixel += 1                  
+                countAllPixels += 1
+                
+    
+    labeledPixels = np.array(labeledPixels)
+    
+    #####################################################################
     #### Region of interest of car  #####
     
-    t_interest = 5 #seconds
-    speed = 50./3 # 60 km/hour
-    #speed = 19.44
+    t_interest = 7 #seconds
+    #speed = 50./3 # 60 km/hour
+    speed = 19.44
     
-    length_box_per_car = 2*t_interest*speed/scale
+    length_box_per_car = np.array([2*t_interest*speed , 2*t_interest*speed])
     #length_box_per_car = 300.
-    width_box_per_car = rectangleWidth/scale
+    width_box_per_car = np.array([road1Width , road2Width])
     carRoI = np.array([length_box_per_car,width_box_per_car])
     
     carLength = 4.48#/scale
@@ -1324,29 +1487,8 @@ def main(T=int(5e2)):
     carLengthScaled = carLength/scalingFactor
     carWidthScaled = carWidth/scalingFactor
     
-    inter_car_dist = 10/scale
     carDimensions = np.array([carLength,carWidth])/scalingFactor # Length X Width
 
-    
-    numSquaresperLength = int(rectangleLength)
-    numSquaresperWidth =  int(rectangleWidth)
-
-        
-    pixelLength = rectangleLength/numSquaresperLength
-    pixelWidth = rectangleWidth/numSquaresperWidth
-    
-    xPosCenterPixel1 = pixelLength/2
-    yPosCenterPixel1 = pixelWidth/2
-    
-    coordPixels = generatePixelsCenters(xPosCenterPixel1, yPosCenterPixel1, pixelLength, pixelWidth, numSquaresperLength, numSquaresperWidth)
-    labeledPixels = np.arange(0,numSquaresperLength*numSquaresperWidth)
-    labeledMatrixPixel = np.zeros((numSquaresperWidth,numSquaresperLength))
-        
-    countPixel = 0
-    for ww in range(numSquaresperWidth):
-        for ll in range(numSquaresperLength):
-            labeledMatrixPixel[ww][ll] = countPixel
-            countPixel += 1
 
     coverageAreaObstructions_1 = []
     coverageAreaObstructions_2 = []
@@ -1389,6 +1531,7 @@ def main(T=int(5e2)):
 
 
     numIter = 5
+    prob_road2 = 0.4
     
     for ii in tqdm(range(len(N))):
          
@@ -1416,15 +1559,27 @@ def main(T=int(5e2)):
              
              print('...start')
              #####  We check if the newly generated vehicle doesn't overlap with any previously generated vehicle  ############ 
+             # There is a probability p>0.5 that a car falls on the large highway, and 1-p that it falls on the thin one
+             
              nn = 0
-             coordSensors = []
+             coordSensors = [] # coordinates of sensors
+             sensors_road_lane = [] # sensor is placed on which "road" and which "lane", as follows [road , lane]
+             
              while nn < N[ii]:
                  check = 0
-                 temp_x = np.random.rand(1,1)*(rectangleLength-0) 
-                 temp_y = rectangleWidth/numLanes/2 + np.random.randint(0,numLanes-1,(1,1))*rectangleWidth/numLanes
+                 selectedRoad = np.random.binomial(1, prob_road2)+1
+                 if selectedRoad == 1: # First road was selected
+                     selectedLane_road1 = np.random.randint(0,numLanes_road1,(1,1))
+                     temp_x = np.random.rand(1,1)*(rectangleLength-0) 
+                     temp_y = (road1Width/numLanes_road1/2 + selectedLane_road1*road1Width/numLanes_road1) + (unwantedPixelsCorners3[3][1] - unwantedPixelsCorners3[0][1])*pixelWidth
+                 else: # 2nd road was selected
+                     selectedLane_road2 = np.random.randint(0,numLanes_road2,(1,1))
+                     temp_x = (road2Width/numLanes_road2/2 + selectedLane_road2*road2Width/numLanes_road2) + (unwantedPixelsCorners1[1][0] - unwantedPixelsCorners1[0][0])*pixelLength 
+                     temp_y = np.random.rand(1,1)*(rectangleWidth-0)
+                      
                  #temp_y = np.random.rand(1,1)*(rectangleWidth-0)
                  
-                 temp_newSensor = np.concatenate((temp_x,temp_y),axis=1)
+                 temp_newSensor = np.concatenate((temp_x/pixelLength,temp_y/pixelWidth),axis=1)
                  # Check first that the new sensor's coordinates have not been previously selected
                  check1 = 0
                  for mm in range(len(coordSensors)):
@@ -1433,10 +1588,20 @@ def main(T=int(5e2)):
                         break
                         # Check that the dist between the new sensor and other sensors is at least: sqrt(L^2+W^2)
                  if check1 == 0: 
+                        
                     if not list(coordSensors):
-                        coordSensors = np.concatenate((temp_x,temp_y),axis=1)
+                        coordSensors = np.concatenate((temp_x/pixelLength,temp_y/pixelWidth),axis=1)
+                        # Check which road was selected, then check which lane in the road was selected
+                        if selectedRoad == 1:
+                            selectedLane = selectedLane_road1
+                        else:
+                            selectedLane = selectedLane_road2
+                        sensors_road_lane = np.concatenate((np.array([np.array([selectedRoad])]),selectedLane),axis=1)
+                        
                         nn += 1
                         coordSensors = list(coordSensors)
+                        sensors_road_lane = list(sensors_road_lane)
+                        # Check in which road is the new car and which lane, since this will affect the region of interest per vehicle
                     else:
                         for mm in range(len(coordSensors)):
                             if temp_newSensor[0][1] == coordSensors[mm][1]:
@@ -1444,10 +1609,17 @@ def main(T=int(5e2)):
                                     check = 1
                                     break                        
                         if check == 0:
-                            coordSensors.append(np.concatenate((temp_x,temp_y),axis=1)[0])   
+                            coordSensors.append(np.concatenate((temp_x/pixelLength,temp_y/pixelWidth),axis=1)[0])
+                            
+                            # Check which road was selected, then check which lane in the road was selected
+                            if selectedRoad == 1:
+                                selectedLane = selectedLane_road1
+                            else:
+                                selectedLane = selectedLane_road2
+                            
+                            sensors_road_lane.append(np.concatenate((np.array([np.array([selectedRoad])]),selectedLane),axis=1)[0])
                             nn += 1
-                 
-             
+                                      
              print('...end')
              
 #             xcoordSensors = 0 + np.random.rand(N[ii],1)*(rectangleLength-0) 
@@ -1460,7 +1632,7 @@ def main(T=int(5e2)):
              
              startTime = time.time()
              # Step 1: Find 4 corners of box of region of interest per car
-             regionOfInterestPerSensor_1 = findCoordregionOfInterestPerSensor_1(coordPixels,coordSensors,N[ii],length_box_per_car,width_box_per_car,boxDim)
+             regionOfInterestPerSensor_1 = findCoordregionOfInterestPerSensor_1(coordPixels,coordSensors,sensors_road_lane,N[ii],length_box_per_car,width_box_per_car,boxDim,numLanes_road1,numLanes_road2,unwantedPixelsCorners1, pixelLength, pixelWidth)
              
              # Step 2: Find pixels in the region of interest
              pixelsPerBoxPerSensor_1 = findPixelsinRegionOfInterest_1(N[ii],coordPixels,coordSensors,length_box_per_car,width_box_per_car,labeledPixels)
