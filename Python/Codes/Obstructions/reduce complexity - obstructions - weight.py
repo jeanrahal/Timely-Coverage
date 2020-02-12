@@ -1143,8 +1143,8 @@ def computeWeightedAgeofTypicalSensor_1(selectedSensors, sensorRadius, coordSens
     
     for pixel in range(len(obstructedPixelsinBox)):
         obstructedPixel = obstructedPixelsinBox[pixel]
-        #index = np.where(labeledMatrixPixel == obstructedPixel)
-        #weight = weightedMap[index[0][0]][index[1][0]]
+        index = np.where(labeledMatrixPixel == obstructedPixel)
+        weight = weightedMap[index[0][0]][index[1][0]]
         #totalWeight += weightedRegionsPerSensor
         
         numSensors = 0
@@ -1157,11 +1157,17 @@ def computeWeightedAgeofTypicalSensor_1(selectedSensors, sensorRadius, coordSens
         else:
             #tempCoveredWeights.append(weight)
             tempAge = d + (1./(numSensors+1.))*(1./ratePerSensor)
+            totalWeight += weight
             
         weightedAgeOfTypicalSensor += tempAge*weightedRegionsPerSensor
         
-        
+#    if totalWeight == 0:
+#        weightedAgeOfTypicalSensor = 0.
+#    else:
+#        weightedAgeOfTypicalSensor = weightedAgeOfTypicalSensor/totalWeight
+   
     weightedAgeOfTypicalSensor = weightedAgeOfTypicalSensor/totalWeight
+     
     return weightedAgeOfTypicalSensor
 
     
@@ -1188,8 +1194,8 @@ def computeWeightedAgeofTypicalSensor_AgeMin_1(selectedSensors, sensorRadius, co
     
     for pixel in range(len(obstructedPixelsinBox)):
         obstructedPixel = obstructedPixelsinBox[pixel]
-        #index = np.where(labeledMatrixPixel == obstructedPixel)
-        #weight = weightedMap[index[0][0]][index[1][0]]
+        index = np.where(labeledMatrixPixel == obstructedPixel)
+        weight = weightedMap[index[0][0]][index[1][0]]
         
         #totalWeight += weightedRegionsPerSensor
         selectedRates = []
@@ -1205,12 +1211,17 @@ def computeWeightedAgeofTypicalSensor_AgeMin_1(selectedSensors, sensorRadius, co
             r_max = max(selectedRates)
             result = quad(return_zj(selectedRates,d), d, d + 1./r_max)
             tempAge = d+result[0]
+            totalWeight += weight
             #tempCoveredWeights.append(weight)
         
         weightedMinAgeOfTypicalSensor += tempAge*weightedRegionsPerSensor
         
-    weightedMinAgeOfTypicalSensor = weightedMinAgeOfTypicalSensor/totalWeight
+#    if totalWeight == 0:
+#        weightedMinAgeOfTypicalSensor = 0.
+#    else:
+#        weightedMinAgeOfTypicalSensor = weightedMinAgeOfTypicalSensor/totalWeight
     
+    weightedMinAgeOfTypicalSensor = weightedMinAgeOfTypicalSensor/totalWeight
     
     return weightedMinAgeOfTypicalSensor
 
@@ -1288,7 +1299,7 @@ def main(T=int(5e2)):
     startTotalTime = time.time()
     scalingFactor = 1
     scale = 1
-    N = np.arange(8,25) # number of sensors
+    N = np.arange(8,11) # number of sensors
     k = 8
     lam = 1.
     sensorRadius = np.array(50/scalingFactor)/scale#coverage radius per sensor
