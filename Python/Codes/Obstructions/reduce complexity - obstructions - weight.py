@@ -972,12 +972,16 @@ def SensSelecModel_2_StochGreedy(N, d, capacity, mu, partitionsArea , allPossibl
         
         # Step 2: Randomly select r_i sensors
         idxOfRandomGeneratedSensors = []
-        for qq in range(r_i):
+        qq = 0
+        print('start')
+        while qq < (r_i):
             tempPickedIdx = np.random.randint(0,N) #Generate numbers within the range [0,N-ii]
-            if tempPickedIdx not in idxOfRandomGeneratedSensors: #Check that the newly generated number hasn't been already picked. If not, add it to the list
+            if tempPickedIdx not in idxOfRandomGeneratedSensors and setofSensors[tempPickedIdx] not in setofSelectedSensors: #Check that the newly generated number hasn't been already picked. If not, add it to the list AND that the newly picked sensor wasn't previously picked
+                qq += 1
                 idxOfRandomGeneratedSensors.append(tempPickedIdx)
      
         setOfRandomGeneratedSensors = setofSensors[idxOfRandomGeneratedSensors]
+        print('end')
         
         for jj in range(len(setOfRandomGeneratedSensors)):
             if setOfRandomGeneratedSensors[jj] not in setofSelectedSensors:
@@ -1072,9 +1076,6 @@ def SensSelecModel_2_Greedy(N, d, capacity, mu, partitionsArea , allPossibleSets
 
 
 
-
-
-
 def computeCoveredAreaOfinterest(selectedSensors,weightedMap,sensorRadius,pixelWidth,pixelLength,labeledPixelMatrix,coordPixels,coordSensors):
     #totalnumPixels = np.prod(np.shape(weightedMap))
     totalnumStricPositivePixels = np.count_nonzero(weightedMap>0)
@@ -1143,8 +1144,8 @@ def computeWeightedAgeofTypicalSensor_1(selectedSensors, sensorRadius, coordSens
     
     for pixel in range(len(obstructedPixelsinBox)):
         obstructedPixel = obstructedPixelsinBox[pixel]
-        index = np.where(labeledMatrixPixel == obstructedPixel)
-        weight = weightedMap[index[0][0]][index[1][0]]
+        #index = np.where(labeledMatrixPixel == obstructedPixel)
+        #weight = weightedMap[index[0][0]][index[1][0]]
         #totalWeight += weightedRegionsPerSensor
         
         numSensors = 0
@@ -1157,7 +1158,7 @@ def computeWeightedAgeofTypicalSensor_1(selectedSensors, sensorRadius, coordSens
         else:
             #tempCoveredWeights.append(weight)
             tempAge = d + (1./(numSensors+1.))*(1./ratePerSensor)
-            totalWeight += weight
+            #totalWeight += weight
             
         weightedAgeOfTypicalSensor += tempAge*weightedRegionsPerSensor
         
@@ -1194,8 +1195,8 @@ def computeWeightedAgeofTypicalSensor_AgeMin_1(selectedSensors, sensorRadius, co
     
     for pixel in range(len(obstructedPixelsinBox)):
         obstructedPixel = obstructedPixelsinBox[pixel]
-        index = np.where(labeledMatrixPixel == obstructedPixel)
-        weight = weightedMap[index[0][0]][index[1][0]]
+        #index = np.where(labeledMatrixPixel == obstructedPixel)
+        #weight = weightedMap[index[0][0]][index[1][0]]
         
         #totalWeight += weightedRegionsPerSensor
         selectedRates = []
@@ -1211,7 +1212,7 @@ def computeWeightedAgeofTypicalSensor_AgeMin_1(selectedSensors, sensorRadius, co
             r_max = max(selectedRates)
             result = quad(return_zj(selectedRates,d), d, d + 1./r_max)
             tempAge = d+result[0]
-            totalWeight += weight
+            #totalWeight += weight
             #tempCoveredWeights.append(weight)
         
         weightedMinAgeOfTypicalSensor += tempAge*weightedRegionsPerSensor
@@ -1299,8 +1300,8 @@ def main(T=int(5e2)):
     startTotalTime = time.time()
     scalingFactor = 1
     scale = 1
-    N = np.arange(8,11) # number of sensors
-    k = 8
+    N = np.arange(9,16) # number of sensors
+    k = 9
     lam = 1.
     sensorRadius = np.array(50/scalingFactor)/scale#coverage radius per sensor
     #sensorRadius = []
@@ -1399,7 +1400,7 @@ def main(T=int(5e2)):
     stdweightedAgeSensSelec_2 = []  
 
 
-    numIter = 5
+    numIter = 3
     
     for ii in tqdm(range(len(N))):
          
