@@ -3,7 +3,7 @@ clc;
 close all;
 
 %% Parameters
-N = 8:18;
+N = 8:16;
 k = 8;
 
 %% Coverage Obstructions
