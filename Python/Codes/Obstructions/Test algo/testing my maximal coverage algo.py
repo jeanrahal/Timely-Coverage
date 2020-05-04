@@ -1131,7 +1131,7 @@ def SensSelecModel_2_StochGreedy(N, d, capacity, mu, partitionsArea , allPossibl
 
 
 
-def SensSelecModel_1_Greedy(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam, k, thresh = 2.):
+def SensSelecModel_1_Greedy(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, k, lam, thresh = 2.):
     #coverageArea = np.sum(partitionsWeight)
     numSelectedSensors = N
     setofSelectedSensors = []
@@ -1144,7 +1144,7 @@ def SensSelecModel_1_Greedy(N, d, capacity, mu, weightedMap, partitionsWeight , 
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
     #lam = d*(1.+2./3.*numSelectedSensors)
-    lam = 1
+    #lam = 1
     
     new_max = 0.
     temp_b_old = 0.
@@ -1169,7 +1169,7 @@ def SensSelecModel_1_Greedy(N, d, capacity, mu, weightedMap, partitionsWeight , 
 
 
 
-def SensSelecModel_2_Greedy(N, d, capacity, mu, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, lam, k, thresh = 2.):
+def SensSelecModel_2_Greedy(N, d, capacity, mu, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, k, lam, thresh = 2.):
     areaWeightedAge = 0.
     coverageArea = np.sum(partitionsArea)
     numSelectedSensors = N
@@ -1183,7 +1183,7 @@ def SensSelecModel_2_Greedy(N, d, capacity, mu, partitionsArea , allPossibleSets
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
     #lam = d*(1.+2./3.*numSelectedSensors)
-    lam = 1
+    #lam = 1
     
     new_max = 0.
     temp_b_old = 0.
@@ -1380,7 +1380,7 @@ def computeNoCollabAge(pixelsPerBoxPerSensor, obstructedPixelsinBox, weightedMap
     return noCollabWeightedAge
     
 #@jit(target ="cuda")  
-def AgeMinModel_1(N, d, capacity, mu, setofSelectedSensors, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, lam, k, thresh = 2.):
+def AgeMinModel_1(N, d, capacity, mu, setofSelectedSensors, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, k, lam, thresh = 2.):
     numSelectedSensors = N    
     if int(N)>int(k):
        numSelectedSensors = int(k) 
@@ -1610,7 +1610,7 @@ def SensSelecMyAlgo_increaseCoverage_EqualWeights(N,d,capacity,mu,allPossibleSet
        numSelectedSensors = int(k) 
     
     ratePerSensor = capacity/(numSelectedSensors*mu*d)
-
+    eps = 1e-3
     
     # Step 3: Part1 : Implement algo that maximizes coverage while decreasing age
     P = anchorPointsPerSensor
@@ -1689,7 +1689,10 @@ def SensSelecMyAlgo_increaseCoverage_EqualWeights(N,d,capacity,mu,allPossibleSet
     else:
         selectedSensors = S_t
         
-    return selectedSensors
+    C1 = len(P[S_t[-1]]) - eps
+    lam = C1*(d+0.5/ratePerSensor) 
+    
+    return selectedSensors, lam
 
 
 
@@ -2020,7 +2023,7 @@ def main(T=int(1e2)):
     stdweightedAgeSensSelec_2 = []  
 
 
-    numIter = 8
+    numIter = 6
     prob_road2 = 0
     num_anchorPoints = 30
     
@@ -2425,30 +2428,30 @@ def main(T=int(1e2)):
                  # b) From the set of picked sensors, pick THE one sensor that achieves minimal age and add it to the set of picked sensors
                  # c) Keep looping until the maximal coverage or cardinality of selected set is k
                  ### 1 - Pick set of sensors that maximize coverage while minimizing age
-                 tempselectedSensorsMyAlgoEqualWeights = SensSelecMyAlgo_increaseCoverage_EqualWeights(N[ii],d,capacity,mu,allPossibleSets_1,partitionsWeights_1,rectangleLength,rectangleWidth,sensorsSeePixel_1,coordSensors,coordPixels,weightedMap_1,sensorRadius,labeledMatrixPixel,labeledPixels,mapOfAnchorPoints,labelofcoveredAnchorPoints,pixelLength,pixelWidth,k[kk])
+                 tempselectedSensorsMyAlgoEqualWeights, computed_lambda = SensSelecMyAlgo_increaseCoverage_EqualWeights(N[ii],d,capacity,mu,allPossibleSets_1,partitionsWeights_1,rectangleLength,rectangleWidth,sensorsSeePixel_1,coordSensors,coordPixels,weightedMap_1,sensorRadius,labeledMatrixPixel,labeledPixels,mapOfAnchorPoints,labelofcoveredAnchorPoints,pixelLength,pixelWidth,k[kk])
                  tempselectedSensorsMyAlgoEqualWeights1 = SensSelecMyAlgo_increaseCoverage_EqualWeights_newAgeObjectiveFunction(N[ii],d,capacity,mu,allPossibleSets_1,partitionsWeights_1,rectangleLength,rectangleWidth,sensorsSeePixel_1,coordSensors,coordPixels,weightedMap_1,sensorRadius,labeledMatrixPixel,labeledPixels,mapOfAnchorPoints,labelofcoveredAnchorPoints,pixelLength,pixelWidth,k[kk])
                  
                  ### 2 - Further minimize age
                  startTime = time.time()
-                 tempRatesofselectedSensorsMyAlgoEqualWeights = AgeMinModel_1(N[ii], d, capacity, mu, tempselectedSensorsMyAlgoEqualWeights, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, lam, k[kk], thresh = 2.)
+                 tempRatesofselectedSensorsMyAlgoEqualWeights = AgeMinModel_1(N[ii], d, capacity, mu, tempselectedSensorsMyAlgoEqualWeights, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, k[kk], lam = computed_lambda, thresh = 2.)
                  endTime = time.time()
                  print("--- %s seconds : Age minimization My Algo Equal Weights" % (endTime - startTime))                 
                  
                  # Technique 1: Region of interest
                  # a - No age minimization
                  startTime = time.time()             
-                 tempselectedSensorsSensSelec_1 = SensSelecModel_1_Greedy(N[ii], d, capacity , mu, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor,lam, k[kk],thresh = 2.)
+                 tempselectedSensorsSensSelec_1 = SensSelecModel_1_Greedy(N[ii], d, capacity , mu, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, k[kk], lam = computed_lambda, thresh = 2.)
                  endTime = time.time()
                  print("--- %s seconds : Sens Select 1" % (endTime - startTime))
                  
                  startTime = time.time()
-                 tempRatesofselectedSensorsAgeMin_1 = AgeMinModel_1(N[ii], d, capacity, mu, tempselectedSensorsSensSelec_1, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, lam, k[kk], thresh = 2.)
+                 tempRatesofselectedSensorsAgeMin_1 = AgeMinModel_1(N[ii], d, capacity, mu, tempselectedSensorsSensSelec_1, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, k[kk], lam = computed_lambda, thresh = 2.)
                  endTime = time.time()
                  print("--- %s seconds : Age minimization" % (endTime - startTime))
                  
                  # Technique 2: All box
                  startTime = time.time()
-                 tempselectedSensorsSensSelec_2 = SensSelecModel_2_Greedy(N[ii], d, capacity , mu, partitionsArea_2*scalingFactor**2 , allPossibleSets_2, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, lam, k[kk], thresh = 2.)
+                 tempselectedSensorsSensSelec_2 = SensSelecModel_2_Greedy(N[ii], d, capacity , mu, partitionsArea_2*scalingFactor**2 , allPossibleSets_2, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, k[kk], lam=computed_lambda, thresh = 2.)
                  endTime = time.time()
                  print("--- %s seconds : Sens Select 2" % (endTime - startTime))
                  # Step 2 - Compute the covered area of the region of interest
