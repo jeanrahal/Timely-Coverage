@@ -99,8 +99,8 @@ def frank_wolfe(N,ratePerSensor, numSelectedSensors, setofSelectedSensors, allPo
     s[idx] = -capacity * np.sign(grad[idx])
     eta = 2./(t+2.)    
     ratePerSensor = ratePerSensor + eta*(s-ratePerSensor)
-    ratePerSensor[ratePerSensor<=0]= d
-    ratePerSensor[ratePerSensor<=5]= 5
+    ratePerSensor[ratePerSensor<=d]= d
+    ratePerSensor[ratePerSensor>=40]= 40
     #ratePerSensor[ratePerSensor>=30]= 30
     
     return ratePerSensor
@@ -121,7 +121,8 @@ def descent(N,update, d, numSelectedSensors, setofSelectedSensors, allPossibleSe
             obj_fn.append(objective_function_MinAge(N,d, ratePerSensor, numSelectedSensors, setofSelectedSensors, allPossibleSets, selectedPartitionsArea))
             #assert not np.isnan(obj_fn[-1]) 
     #ratePerSensor[ratePerSensor<=5] = 5
-    #ratePerSensor[ratePerSensor>=30] = 30
+    ratePerSensor[ratePerSensor>=40] = 40
+    #ratePerSensor[ratePerSensor<=30] = 30
     
     return ratePerSensor, obj_fn, l1
 
@@ -952,6 +953,125 @@ def compute_b_1(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,
     return b, percentageCoveredWeight , weightedAge/totalCoveredWeight , selectedPartitionsArea
 
 
+
+
+def compute_b_1_newAgeObjective(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,ratePerSensor, currSensor, allPossibleSets,weightedMap,lam):
+    b = 0.
+    AgePerPartition = []
+    coveredWeight = []
+    tempP = np.zeros(len(partitionsWeight))
+    newPartitionWeight = np.zeros(len(partitionsWeight))
+    
+    startTime = time.time()
+    if not setofSelectedSensors:
+        currSensors = np.array(currSensor)
+        for ii in range(len(partitionsWeight)):
+            if currSensors in allPossibleSets[ii]:    
+                tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+                newPartitionWeight[ii] = partitionsWeight[ii] 
+    else:
+        currSensors = copy.copy(setofSelectedSensors)
+        currSensors.append(currSensor)
+        for s in range(len(currSensors)):
+            for ii in range(len(partitionsWeight)):
+                if currSensors[s] in allPossibleSets[ii]:    
+                    tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+                    newPartitionWeight[ii] = partitionsWeight[ii]                    
+                
+    
+    endTime = time.time()
+    #print("--- %s seconds : Sens select 1: Compute new partitions' weights" % (endTime - startTime))    
+    
+    # Find indices of non-zero weights
+    idxNonZeroWeight = np.nonzero(newPartitionWeight)
+    
+    # Remove the 0 weights entries from newPartitionWeight, as well as allPossibleSets
+    newPartitionWeight = newPartitionWeight[idxNonZeroWeight]
+    tempP = tempP[idxNonZeroWeight]    
+    
+    
+    startTime = time.time()
+    
+    for ii in range(len(newPartitionWeight)):
+        n = tempP[ii]
+        tempAge = (n/(n+1.))*(1./ratePerSensor) 
+        AgePerPartition.append(tempAge)
+        coveredWeight.append(newPartitionWeight[ii])
+            
+    totalCoveredWeight = np.sum(coveredWeight)        
+    weightedAge = np.sum(np.array(coveredWeight)*np.array(AgePerPartition))        
+    selectedPartitionsArea = copy.copy(newPartitionWeight)
+    
+    a = weightedAge - lam*(np.sum(partitionsWeight)-totalCoveredWeight )     
+    
+    percentageCoveredWeight = totalCoveredWeight/np.sum(np.sum(weightedMap))*100.
+    
+    endTime = time.time()
+    
+    #print("--- %s seconds : Sens Select 1: Compute b" % (endTime - startTime))
+    
+    return a, percentageCoveredWeight , weightedAge/totalCoveredWeight , selectedPartitionsArea
+
+
+
+def compute_b_1_newNormalizedObjective(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,ratePerSensor, currSensor, allPossibleSets,weightedMap,lam):
+    b = 0.
+    AgePerPartition = []
+    coveredWeight = []
+    tempP = np.zeros(len(partitionsWeight))
+    newPartitionWeight = np.zeros(len(partitionsWeight))
+    
+    startTime = time.time()
+    if not setofSelectedSensors:
+        currSensors = np.array(currSensor)
+        for ii in range(len(partitionsWeight)):
+            if currSensors in allPossibleSets[ii]:    
+                tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+                newPartitionWeight[ii] = partitionsWeight[ii] 
+    else:
+        currSensors = copy.copy(setofSelectedSensors)
+        currSensors.append(currSensor)
+        for s in range(len(currSensors)):
+            for ii in range(len(partitionsWeight)):
+                if currSensors[s] in allPossibleSets[ii]:    
+                    tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+                    newPartitionWeight[ii] = partitionsWeight[ii]                    
+                
+    
+    endTime = time.time()
+    #print("--- %s seconds : Sens select 1: Compute new partitions' weights" % (endTime - startTime))    
+    
+    # Find indices of non-zero weights
+    idxNonZeroWeight = np.nonzero(newPartitionWeight)
+    
+    # Remove the 0 weights entries from newPartitionWeight, as well as allPossibleSets
+    newPartitionWeight = newPartitionWeight[idxNonZeroWeight]
+    tempP = tempP[idxNonZeroWeight]    
+    
+    
+    startTime = time.time()
+    
+    for ii in range(len(newPartitionWeight)):
+        n = tempP[ii]
+        tempAge = (n/(n+1.))*(1./ratePerSensor) 
+        AgePerPartition.append(tempAge)
+        coveredWeight.append(newPartitionWeight[ii])
+            
+    totalCoveredWeight = np.sum(coveredWeight)        
+    normalizedweightedAge = np.sum(np.array(coveredWeight)*np.array(AgePerPartition))/np.sum(np.array(coveredWeight))        
+    selectedPartitionsArea = copy.copy(newPartitionWeight)
+    
+    a = normalizedweightedAge 
+    
+    percentageCoveredWeight = totalCoveredWeight/np.sum(np.sum(weightedMap))*100.
+    
+    endTime = time.time()
+    
+    #print("--- %s seconds : Sens Select 1: Compute b" % (endTime - startTime))
+    
+    return a, percentageCoveredWeight , np.sum(np.array(coveredWeight))/totalCoveredWeight , selectedPartitionsArea
+
+
 def compute_b_2(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors ,ratePerSensor, currSensor, allPossibleSets, lam):
     b = 0.
     AgePerPartition = []
@@ -1004,6 +1124,53 @@ def compute_b_2(N, d, mu, partitionsArea, setofSelectedSensors, setofSensors ,ra
     b = a_empty-a
     
     return b, totalCoveredArea, areaWeightedAge, selectedPartitionsArea
+
+
+
+## Compute the cost function: the normalized weighted new age function a
+    
+def compute_g_new(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,ratePerSensor, currSensor, allPossibleSets):
+    g = 0.
+    AgePerPartition = []
+    coveredWeight = []
+    tempP = np.zeros(2**N-1)
+    newPartitionWeight = np.zeros(2**N-1)
+    if not setofSelectedSensors:
+        currSensors = np.array(currSensor)
+        for ii in range(len(partitionsWeight)):
+            if currSensors in allPossibleSets[ii]:    
+                tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+                newPartitionWeight[ii] = partitionsWeight[ii] 
+    else:
+        currSensors = copy.copy(setofSelectedSensors)
+        currSensors.append(currSensor)
+        for s in range(len(currSensors)):
+            for ii in range(len(partitionsWeight)):
+                if currSensors[s] in allPossibleSets[ii]:    
+                    tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+                    newPartitionWeight[ii] = partitionsWeight[ii]                    
+                
+    # Find indices of non-zero weights
+    idxNonZeroWeight = np.nonzero(newPartitionWeight)
+    
+    # Remove the 0 weights entries from newPartitionWeight, as well as allPossibleSets
+    newPartitionWeight = newPartitionWeight[idxNonZeroWeight]
+    tempP = tempP[idxNonZeroWeight]   
+
+                
+    for ii in range(len(newPartitionWeight)):
+        n = tempP[ii]
+        tempAge = (n/(n+1.))*(1./ratePerSensor) 
+        AgePerPartition.append(tempAge)
+        coveredWeight.append(newPartitionWeight[ii])
+            
+    totalCoveredArea = np.sum(coveredWeight)        
+    WeightedAge = np.sum(np.array(coveredWeight)*np.array(AgePerPartition))        
+    selectedPartitionsArea = copy.copy(newPartitionWeight)
+    
+    g = 1/np.sum(np.array(coveredWeight))*WeightedAge  
+    
+    return g, totalCoveredArea, WeightedAge , selectedPartitionsArea
 
 
 
@@ -1168,6 +1335,79 @@ def SensSelecModel_1_Greedy(N, d, capacity, mu, weightedMap, partitionsWeight , 
     return setofSelectedSensors
 
 
+def SensSelecModel_1_Greedy_newNormalizedObjective(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, k, lam, thresh = 2.):
+    #coverageArea = np.sum(partitionsWeight)
+    numSelectedSensors = N
+    setofSelectedSensors = []
+    setofSensors = np.arange(0,N,1)
+    
+    #k = 5.
+    #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
+    if int(N)>int(k):
+       numSelectedSensors = int(k) 
+    
+    ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    #lam = d*(1.+2./3.*numSelectedSensors)
+    #lam = 1
+    
+    new_max = 0.
+    temp_b_old = 0.
+    for ii in range(int(numSelectedSensors)):
+        b_old = temp_b_old
+        new_max = 0.
+        for jj in range(N):
+            if jj not in setofSelectedSensors:
+                b_new, temp_percentageCoveredWeight , temp_weightedAge , selectedPartitionsArea = compute_b_1_newNormalizedObjective(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors, ratePerSensor, jj, allPossibleSets,weightedMap, lam)
+                if np.abs(b_new - b_old) >= new_max:
+                    new_max = (b_new - b_old)
+                    temp_b_old = b_new
+                    selectedSensor = jj
+                    coverageWeight = temp_percentageCoveredWeight
+                    weightedAge = temp_weightedAge 
+        setofSelectedSensors.append(selectedSensor)
+    
+    #setofSelectedSensors = setofSelectedSensors - np.ones(len(setofSelectedSensors))             
+    #setofSelectedSensors = np.sort(setofSelectedSensors)
+    
+    return setofSelectedSensors
+
+
+def SensSelecModel_1_Greedy_newAgeObjective(N, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, k, lam, thresh = 2.):
+    #coverageArea = np.sum(partitionsWeight)
+    numSelectedSensors = N
+    setofSelectedSensors = []
+    setofSensors = np.arange(0,N,1)
+    
+    #k = 5.
+    #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
+    if int(N)>int(k):
+       numSelectedSensors = int(k) 
+    
+    ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    #lam = d*(1.+2./3.*numSelectedSensors)
+    #lam = 1
+    
+    new_max = 0.
+    temp_b_old = 0.
+    for ii in range(int(numSelectedSensors)):
+        b_old = temp_b_old
+        new_max = 0.
+        for jj in range(N):
+            if jj not in setofSelectedSensors:
+                b_new, temp_percentageCoveredWeight , temp_weightedAge , selectedPartitionsArea = compute_b_1_newAgeObjective(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors, ratePerSensor, jj, allPossibleSets,weightedMap, lam)
+                if np.abs(b_new - b_old) >= new_max:
+                    new_max = (b_new - b_old)
+                    temp_b_old = b_new
+                    selectedSensor = jj
+                    coverageWeight = temp_percentageCoveredWeight
+                    weightedAge = temp_weightedAge 
+        setofSelectedSensors.append(selectedSensor)
+    
+    #setofSelectedSensors = setofSelectedSensors - np.ones(len(setofSelectedSensors))             
+    #setofSelectedSensors = np.sort(setofSelectedSensors)
+    
+    return setofSelectedSensors
+
 
 def SensSelecModel_2_Greedy(N, d, capacity, mu, partitionsArea , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, k, lam, thresh = 2.):
     areaWeightedAge = 0.
@@ -1224,8 +1464,8 @@ def computeCoveredAreaOfinterest(selectedSensors,weightedMap,sensorRadius,pixelW
     return coverage
 
 
-def computeCoveredAreaofTypicalSensor(selectedSensors, sensorRadius, coordSensors, coordPixels, pixelsPerBoxPerSensor, obstructedPixelsinBox, labeledPixelMatrix, pixelLength, pixelWidth):
-    numTotalPixels = np.prod(np.shape(pixelsPerBoxPerSensor))
+def computeCoveredAreaofTypicalSensor(selectedSensors, num_anchorPoints, sensorRadius, coordSensors, coordPixels, pixelsPerBoxPerSensor, obstructedPixelsinBox, labeledPixelMatrix, pixelLength, pixelWidth):
+    numTotalPixels = num_anchorPoints#np.prod(np.shape(pixelsPerBoxPerSensor))
     numCoveredPixels = numTotalPixels - len(obstructedPixelsinBox)
     
     numAddedPixels = 0
@@ -1235,7 +1475,7 @@ def computeCoveredAreaofTypicalSensor(selectedSensors, sensorRadius, coordSensor
                 numAddedPixels += 1
                 break
             
-    numTotalCoveredPixels = numCoveredPixels + numAddedPixels
+    numTotalCoveredPixels = numAddedPixels #numCoveredPixels + numAddedPixels
     coverageOfTypicalSensor = numTotalCoveredPixels/numTotalPixels*100
     
     return coverageOfTypicalSensor, numTotalCoveredPixels
@@ -1347,9 +1587,20 @@ def computeWeightedAgeofTypicalSensor_AgeMin_1(selectedSensors, coverage, sensor
 
 
 
-def computeNoCollabCoverage(pixelsPerBoxPerSensor, obstructedPixelsinBox):
-    numTotalPixels = np.prod(np.shape(pixelsPerBoxPerSensor))
+def computeNoCollabCoverage(selectedSensors, sensorRadius, num_anchorPoints, obstructedPixelsinBox, coordPixels,coordSensors,pixelLength, pixelWidth):
+    numTotalPixels = num_anchorPoints#np.prod(np.shape(pixelsPerBoxPerSensor))
     numCoveredPixels = numTotalPixels - len(obstructedPixelsinBox)
+    numPixelsSeenPerSensor = []
+    
+    for sensor in range(len(selectedSensors)):
+        numAddedPixelsPerSensor = 0
+        for pixel in range(len(obstructedPixelsinBox)):
+            if pixelisInCircle(selectedSensors[sensor],sensorRadius,int(obstructedPixelsinBox[pixel]),coordPixels,coordSensors,pixelLength, pixelWidth):
+                numAddedPixelsPerSensor += 1
+        numPixelsSeenPerSensor.append(numAddedPixelsPerSensor)
+            
+    avgNumCoveredPixelsPerSensor = np.mean(numPixelsSeenPerSensor) #numCoveredPixels + numAddedPixels
+    noCollabCoverage = avgNumCoveredPixelsPerSensor/numTotalPixels*100
 
     noCollabCoverage = numCoveredPixels/numTotalPixels*100
 
@@ -1562,6 +1813,63 @@ def compute_newObjectiveFunction_Age(N, d, mu, partitionsWeight, setofSelectedSe
           
     return b
 
+
+
+
+
+
+def compute_newNormalizedObjectiveFunction_Age(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors ,ratePerSensor, currSensor, allPossibleSets,weightedMap):
+    b = 0.
+    AgePerPartition = []
+    coveredWeight = []
+    tempP = np.zeros(len(partitionsWeight))
+    newPartitionWeight = np.zeros(len(partitionsWeight))
+    
+    if not setofSelectedSensors:
+        currSensors = np.array(currSensor)
+        for ii in range(len(partitionsWeight)):
+            if currSensors in allPossibleSets[ii]:    
+                tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+                newPartitionWeight[ii] = partitionsWeight[ii] 
+    else:
+        currSensors = copy.copy(setofSelectedSensors)
+        currSensors.append(currSensor)
+        for s in range(len(currSensors)):
+            for ii in range(len(partitionsWeight)):
+                if currSensors[s] in allPossibleSets[ii]:    
+                    tempP[ii] = tempP[ii] + 1 #check how many sensors cover a particular partition
+                    newPartitionWeight[ii] = partitionsWeight[ii]                    
+                
+    
+    # Find indices of non-zero weights
+    idxNonZeroWeight = np.nonzero(newPartitionWeight)
+    
+    # Remove the 0 weights entries from newPartitionWeight, as well as allPossibleSets
+    newPartitionWeight = newPartitionWeight[idxNonZeroWeight]
+    tempP = tempP[idxNonZeroWeight]    
+    
+    
+    for ii in range(len(newPartitionWeight)):
+        n = tempP[ii]
+        if n!=0:
+            tempAge = d + (n/(n+1.))*(1./ratePerSensor) 
+            #tempAge = (n+2.)/(n+1.)*(1./ratePerSensor)
+            AgePerPartition.append(tempAge)
+            coveredWeight.append(newPartitionWeight[ii])
+        else:
+            h=0
+            #AgePerPartition.append(0.)
+            #coveredWeight.append(0.)
+            
+    weightedAge = np.sum(np.array(coveredWeight)*np.array(AgePerPartition))/np.sum(np.array(coveredWeight))        
+        
+    b = weightedAge
+          
+    return b
+
+
+
+
 def SensSelecModel_1_Greedy_myalgo(N, setofSelectedSensors, remaining_unselected_sensors, d, capacity, mu, weightedMap, partitionsWeight , allPossibleSets, rectangleLength, rectangleWidth, sensorRadius, k, thresh = 2.):
     #coverageArea = np.sum(partitionsWeight)
     numSelectedSensors = N
@@ -1689,11 +1997,47 @@ def SensSelecMyAlgo_increaseCoverage_EqualWeights(N,d,capacity,mu,allPossibleSet
     else:
         selectedSensors = S_t
         
-    C1 = len(P[S_t[-1]]) - eps
-    lam = C1*(d+0.5/ratePerSensor) 
+    C1 = len(P[S_t[0]]) 
+    lam = C1*1./(6.*ratePerSensor)
     
     return selectedSensors, lam
 
+
+
+def SensSelecMyAlgo_newObjectiveNormalizedFn(N,d,capacity,mu,allPossibleSets,partitionsWeight,rectangleLength,rectangleWidth,sensorsSeePixel,coordSensors,coordPixels,weightedMap,sensorRadius,labeledMatrixPixel,labeledPixels,mapOfAnchorPoints,labelofcoveredAnchorPoints,pixelLength,pixelWidth,k):
+    areaWeightedAge = 0.
+    coverageWeight = np.sum(partitionsWeight)
+    numSelectedSensors = N
+    setofSelectedSensors = []
+    setofSensors = np.arange(0,N,1)
+    
+    #k = 5.
+    #np.ceil((rectangleLength/sensorRadius)*1.) - 5.
+    if int(N)>int(k):
+       numSelectedSensors = int(k) 
+    
+    ratePerSensor = capacity/(numSelectedSensors*mu*d)
+    #lam = d*(1.+2./3.*numSelectedSensors)
+    #lam = 1
+    
+    new_max = 0.
+    temp_g_old = 0.
+    for ii in range(int(numSelectedSensors)):
+        g_old = temp_g_old
+        new_max = 0.
+        for jj in range(N):
+            if jj not in setofSelectedSensors:
+                g_new, tempcoverageWeight, tempWeightedAge, selectedPartitionsWeight = compute_g_new(N, d, mu, partitionsWeight, setofSelectedSensors, setofSensors, ratePerSensor, jj, allPossibleSets)
+                if np.abs(g_new - g_old) >= new_max:
+                    new_max = (g_new - g_old)
+                    temp_g_old = g_new
+                    selectedSensor = jj
+                    coverageWeight = tempcoverageWeight
+                    areaWeightedAge = tempWeightedAge
+        setofSelectedSensors.append(selectedSensor)
+
+    
+    return setofSelectedSensors
 
 
 
@@ -1789,8 +2133,11 @@ def SensSelecMyAlgo_increaseCoverage_EqualWeights_newAgeObjectiveFunction(N,d,ca
         selectedSensors = newSelectedSensors
     else:
         selectedSensors = S_t
+
+    C1 = len(P[S_t[0]]) 
+    lam = C1*1./(6.*ratePerSensor)
         
-    return selectedSensors
+    return selectedSensors , lam
 
 
 
@@ -1805,8 +2152,8 @@ def main(T=int(1e2)):
     #sensorRadius = []
     #sensorRadius = np.array([1.,1.,1.,1.,1.,2.,2.,2.,2.,2.])    
     capacity = 1.
-    d = 4.2e-3 # transmission delay mmWave
-    #d = 112e-3 #transmission delay LTE
+    #d = 4.2e-3 # transmission delay mmWave
+    d = 64.44e-3 #transmission delay LTE - camera frame
     mu = 1. # packet size 
     
     plot = 0
@@ -1996,6 +2343,12 @@ def main(T=int(1e2)):
     coverageTypicalSensorSensSelec_1 = []
     weightedAgeSensSelec_1 = []
     weightedAgeMinAge_1 = []
+
+    coverageTypicalSensorSensSelec_1_newAgeObjective = []
+    weightedAgeSensSelec_1_newAgeObjective = []
+    
+    coverageTypicalSensorSensSelec_1_newNormalizedObjective = []
+    weightedAgeSensSelec_1_newNormalizedObjective = []    
     
     coverageObstructedPixelsSensSelec_2 = []
     coverageTypicalSensorSensSelec_2 = []
@@ -2013,6 +2366,10 @@ def main(T=int(1e2)):
     stdnoCollabCoverageTypicalSensor = []
     stdnoCollabWeightedAgeTypicalSensor = []
     
+    stdcoverage_MyAlgoEqualWeights1 = []
+    stdweightedAge_MyAlgoEqualWeights1 = []
+    stdweightedAge_MyAlgoEqualWeights_MinAge = []
+    
     stdcoverageObstructedPixelsSensSelec_1 = []
     stdcoverageTypicalSensorSensSelec_1 = []
     stdweightedAgeSensSelec_1 = []
@@ -2023,9 +2380,9 @@ def main(T=int(1e2)):
     stdweightedAgeSensSelec_2 = []  
 
 
-    numIter = 6
+    numIter = 5
     prob_road2 = 0
-    num_anchorPoints = 30
+    num_anchorPoints = 25
     
     for ii in tqdm(range(len(N))):
          
@@ -2050,6 +2407,12 @@ def main(T=int(1e2)):
          weightedAgeSensSelec_1.append([])
          weightedAgeMinAge_1.append([])
                   
+         coverageTypicalSensorSensSelec_1_newAgeObjective.append([])
+         weightedAgeSensSelec_1_newAgeObjective.append([])
+       
+         coverageTypicalSensorSensSelec_1_newNormalizedObjective.append([])
+         weightedAgeSensSelec_1_newNormalizedObjective.append([])        
+        
          coverageObstructedPixelsSensSelec_2.append([])
          coverageTypicalSensorSensSelec_2.append([])
          weightedAgeSensSelec_2.append([])
@@ -2063,6 +2426,10 @@ def main(T=int(1e2)):
         
          stdnoCollabCoverageTypicalSensor.append([])
          stdnoCollabWeightedAgeTypicalSensor.append([])
+
+         stdcoverage_MyAlgoEqualWeights1.append([])
+         stdweightedAge_MyAlgoEqualWeights1.append([])
+         stdweightedAge_MyAlgoEqualWeights_MinAge.append([])
         
          stdcoverageObstructedPixelsSensSelec_1.append([])
          stdcoverageTypicalSensorSensSelec_1.append([])
@@ -2094,6 +2461,12 @@ def main(T=int(1e2)):
          temp2coverageTypicalSensorSensSelec_1 = []
          temp2WeightedAgeSensSelec_1 = [] 
          temp2WeightedAgeMinAge_1 = []
+
+         temp2coverageTypicalSensorSensSelec_1_newAgeObjective = []
+         temp2WeightedAgeSensSelec_1_newAgeObjective = [] 
+
+         temp2coverageTypicalSensorSensSelec_1_newNormalizedObjective = []
+         temp2WeightedAgeSensSelec_1_newNormalizedObjective = []
          
          temp2coverageObstructedPixelsSensSelec_2 = []
          temp2coverageTypicalSensorSensSelec_2 = []         
@@ -2120,7 +2493,14 @@ def main(T=int(1e2)):
              temp1coverageTypicalSensorSensSelec_1 = []
              temp1WeightedAgeSensSelec_1 = []                 
              temp1WeightedAgeMinAge_1 = []
-                 
+             
+             
+             temp1coverageTypicalSensorSensSelec_1_newAgeObjective = []
+             temp1WeightedAgeSensSelec_1_newAgeObjective = []                 
+             
+             temp1coverageTypicalSensorSensSelec_1_newNormalizedObjective = []
+             temp1WeightedAgeSensSelec_1_newNormalizedObjective = []   
+             
              temp1coverageObstructedPixelsSensSelec_2 = []
              temp1coverageTypicalSensorSensSelec_2 = []         
              temp1WeightedAgeSensSelec_2 = []
@@ -2145,6 +2525,12 @@ def main(T=int(1e2)):
              temp2coverageTypicalSensorSensSelec_1.append([])
              temp2WeightedAgeSensSelec_1.append([])
          
+             temp2coverageTypicalSensorSensSelec_1_newAgeObjective.append([])
+             temp2WeightedAgeSensSelec_1_newAgeObjective.append([])
+             
+             temp2coverageTypicalSensorSensSelec_1_newNormalizedObjective.append([])
+             temp2WeightedAgeSensSelec_1_newNormalizedObjective.append([])             
+             
              temp2WeightedAgeMinAge_1.append([])
          
              temp2coverageObstructedPixelsSensSelec_2.append([])
@@ -2428,12 +2814,15 @@ def main(T=int(1e2)):
                  # b) From the set of picked sensors, pick THE one sensor that achieves minimal age and add it to the set of picked sensors
                  # c) Keep looping until the maximal coverage or cardinality of selected set is k
                  ### 1 - Pick set of sensors that maximize coverage while minimizing age
-                 tempselectedSensorsMyAlgoEqualWeights, computed_lambda = SensSelecMyAlgo_increaseCoverage_EqualWeights(N[ii],d,capacity,mu,allPossibleSets_1,partitionsWeights_1,rectangleLength,rectangleWidth,sensorsSeePixel_1,coordSensors,coordPixels,weightedMap_1,sensorRadius,labeledMatrixPixel,labeledPixels,mapOfAnchorPoints,labelofcoveredAnchorPoints,pixelLength,pixelWidth,k[kk])
-                 tempselectedSensorsMyAlgoEqualWeights1 = SensSelecMyAlgo_increaseCoverage_EqualWeights_newAgeObjectiveFunction(N[ii],d,capacity,mu,allPossibleSets_1,partitionsWeights_1,rectangleLength,rectangleWidth,sensorsSeePixel_1,coordSensors,coordPixels,weightedMap_1,sensorRadius,labeledMatrixPixel,labeledPixels,mapOfAnchorPoints,labelofcoveredAnchorPoints,pixelLength,pixelWidth,k[kk])
+#                 tempselectedSensorsMyAlgoEqualWeights, computed_lambda = SensSelecMyAlgo_increaseCoverage_EqualWeights(N[ii],d,capacity,mu,allPossibleSets_1,partitionsWeights_1,rectangleLength,rectangleWidth,sensorsSeePixel_1,coordSensors,coordPixels,weightedMap_1,sensorRadius,labeledMatrixPixel,labeledPixels,mapOfAnchorPoints,labelofcoveredAnchorPoints,pixelLength,pixelWidth,k[kk])
+                 
+                 #tempselectedSensors_MyAlgoEqualWeightsNewObjectiveFn = SensSelecMyAlgo_newObjectiveNormalizedFn(N[ii],d,capacity,mu,allPossibleSets_1,partitionsWeights_1,rectangleLength,rectangleWidth,sensorsSeePixel_1,coordSensors,coordPixels,weightedMap_1,sensorRadius,labeledMatrixPixel,labeledPixels,mapOfAnchorPoints,labelofcoveredAnchorPoints,pixelLength,pixelWidth,k[kk])
+                 
+                 tempselectedSensorsMyAlgoEqualWeights1, computed_lambda = SensSelecMyAlgo_increaseCoverage_EqualWeights_newAgeObjectiveFunction(N[ii],d,capacity,mu,allPossibleSets_1,partitionsWeights_1,rectangleLength,rectangleWidth,sensorsSeePixel_1,coordSensors,coordPixels,weightedMap_1,sensorRadius,labeledMatrixPixel,labeledPixels,mapOfAnchorPoints,labelofcoveredAnchorPoints,pixelLength,pixelWidth,k[kk])
                  
                  ### 2 - Further minimize age
                  startTime = time.time()
-                 tempRatesofselectedSensorsMyAlgoEqualWeights = AgeMinModel_1(N[ii], d, capacity, mu, tempselectedSensorsMyAlgoEqualWeights, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, k[kk], lam = computed_lambda, thresh = 2.)
+                 tempRatesofselectedSensorsMyAlgoEqualWeights = AgeMinModel_1(N[ii], d, capacity, mu, tempselectedSensorsMyAlgoEqualWeights1, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, k[kk], lam = computed_lambda, thresh = 2.)
                  endTime = time.time()
                  print("--- %s seconds : Age minimization My Algo Equal Weights" % (endTime - startTime))                 
                  
@@ -2441,11 +2830,14 @@ def main(T=int(1e2)):
                  # a - No age minimization
                  startTime = time.time()             
                  tempselectedSensorsSensSelec_1 = SensSelecModel_1_Greedy(N[ii], d, capacity , mu, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, k[kk], lam = computed_lambda, thresh = 2.)
+                 tempselectedSensorsSensSelec_1_newAgeObjective = SensSelecModel_1_Greedy_newAgeObjective(N[ii], d, capacity , mu, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, k[kk], lam = computed_lambda, thresh = 2.)
+                 tempselectedSensorsSensSelec_1_newNormalizedObjective = SensSelecModel_1_Greedy_newNormalizedObjective(N[ii], d, capacity , mu, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength*scalingFactor, rectangleWidth*scalingFactor , sensorRadius*scalingFactor, scalingFactor, k[kk], lam = computed_lambda, thresh = 2.)
+
                  endTime = time.time()
                  print("--- %s seconds : Sens Select 1" % (endTime - startTime))
                  
                  startTime = time.time()
-                 tempRatesofselectedSensorsAgeMin_1 = AgeMinModel_1(N[ii], d, capacity, mu, tempselectedSensorsSensSelec_1, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, k[kk], lam = computed_lambda, thresh = 2.)
+                 tempRatesofselectedSensorsAgeMin_1 = AgeMinModel_1(N[ii], d, capacity, mu, tempselectedSensorsSensSelec_1_newAgeObjective, weightedMap_1, partitionsWeights_1 , allPossibleSets_1, rectangleLength, rectangleWidth, sensorRadius, scalingFactor, T, k[kk], lam = computed_lambda, thresh = 2.)
                  endTime = time.time()
                  print("--- %s seconds : Age minimization" % (endTime - startTime))
                  
@@ -2474,6 +2866,10 @@ def main(T=int(1e2)):
                  
                  temp3coverageTypicalSensor_Baseline = []
                  temp3weightedAgeTypicalSensor_Baseline = []
+
+                 temp3coverageTypicalSensor_MyAlgoEqualWeightsNewNormalizedObjectiveFn = []
+                 temp3weightedAgeTypicalSensor_MyAlgoEqualWeightsNewNormalizedObjectiveFn = []
+                 temp3weightedAgeTypicalSensorAgeMin_MyAlgoEqualWeightsNewNormalizedObjectiveFn = []
                  
                  temp3coverageTypicalSensor_MyAlgoEqualWeights = []
                  temp3weightedAgeTypicalSensor_MyAlgoEqualWeights = []
@@ -2486,12 +2882,18 @@ def main(T=int(1e2)):
                  temp3weightedAgeTypicalSensor_1 = []
                  temp3weightedAgeTypicalSensorAgeMin_1 = []
                  
+                 temp3coverageTypicalSensor_1_newAgeObjective = []
+                 temp3weightedAgeTypicalSensor_1_newAgeObjective = []
+                 
+                 temp3coverageTypicalSensor_1_newNormalizedObjective = []
+                 temp3weightedAgeTypicalSensor_1_newNormalizedObjective = []
+             
                  temp3coverageTypicalSensor_2 = []
                  temp3weightedAgeTypicalSensor_2 = []
                  
                  startTime = time.time()
                  
-                 num = 1#int(N[ii])
+                 num = 1 #int(N[ii])
                  for mm in range(num):
                     #Compute the covered area of the region of interest
                     # Technique 1: Region of interest
@@ -2501,78 +2903,103 @@ def main(T=int(1e2)):
                     #coverageObstrucedPixels_2 = computeCoveredAreaofObstructedRegionTypicalSensor(tempselectedSensorsSensSelec_2, sensorRadius, coordSensors, coordPixels, pixelsPerBoxPerSensor_1[mm],obstructedPixelsinBox_1[mm], labeledMatrixPixel,pixelLength, pixelWidth)
                     
                     # No collaboration
-                    #noCollabCoverage = computeNoCollabCoverage(pixelsPerBoxPerSensor_1[mm], obstructedPixelsinBox_1[mm])
+                    noCollabCoverage = computeNoCollabCoverage(np.arange(0,N[ii],1), sensorRadius, num_anchorPoints, obstructedCoveredAnchorPoint, coordPixels,coordSensors,pixelLength, pixelWidth)
                     #noCollabWeightedAge = computeNoCollabAge(pixelsPerBoxPerSensor_1[mm], obstructedPixelsinBox_1[mm], weightedMap_1, weightedRegionsPerSensor_1[mm], labeledMatrixPixel, lam, d, N[ii], k, capacity, mu)
                 
                     # Sensor Selection
                     # Baseline: Select all sensors
-                    coverageTypicalSensor_Baseline, numTotalCoveredPixels_Baseline = computeCoveredAreaofTypicalSensor(np.arange(0,N[ii],1), sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
+                    coverageTypicalSensor_Baseline, numTotalCoveredPixels_Baseline = computeCoveredAreaofTypicalSensor(np.arange(0,N[ii],1), num_anchorPoints, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
                     weightedAgeTypicalSensor_Baseline = computeWeightedAgeofTypicalSensor_1(np.arange(0,N[ii],1), numTotalCoveredPixels_Baseline , sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1[mm], lam, d, N[ii], capacity, mu, pixelLength, pixelWidth, k=N[ii])
                  
                     # Technique 1: Region of Interest
                     
                     # My algo:
-                    coverageTypicalSensor_MyAlgoEqualWeights, numTotalCoveredPixels_MyAlgoEqualWeights = computeCoveredAreaofTypicalSensor(tempselectedSensorsMyAlgoEqualWeights, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
-                    weightedAgeTypicalSensor_MyAlgoEqualWeights = computeWeightedAgeofTypicalSensor_1(tempselectedSensorsMyAlgoEqualWeights, numTotalCoveredPixels_MyAlgoEqualWeights, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, pixelLength, pixelWidth, k[kk])
-                    weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights = computeWeightedAgeofTypicalSensor_AgeMin_1(tempselectedSensorsMyAlgoEqualWeights, numTotalCoveredPixels_MyAlgoEqualWeights, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, tempRatesofselectedSensorsMyAlgoEqualWeights, pixelLength, pixelWidth, k[kk])
+#                    coverageTypicalSensor_MyAlgoEqualWeights, numTotalCoveredPixels_MyAlgoEqualWeights = computeCoveredAreaofTypicalSensor(tempselectedSensorsMyAlgoEqualWeights, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
+#                    weightedAgeTypicalSensor_MyAlgoEqualWeights = computeWeightedAgeofTypicalSensor_1(tempselectedSensorsMyAlgoEqualWeights, numTotalCoveredPixels_MyAlgoEqualWeights, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, pixelLength, pixelWidth, k[kk])
+#                    weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights = computeWeightedAgeofTypicalSensor_AgeMin_1(tempselectedSensorsMyAlgoEqualWeights, numTotalCoveredPixels_MyAlgoEqualWeights, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, tempRatesofselectedSensorsMyAlgoEqualWeights, pixelLength, pixelWidth, k[kk])
                     
                     
                     # My algo: new objective function
-                    coverageTypicalSensor_MyAlgoEqualWeights1, numTotalCoveredPixels_MyAlgoEqualWeights1 = computeCoveredAreaofTypicalSensor(tempselectedSensorsMyAlgoEqualWeights1, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
-                    weightedAgeTypicalSensor_MyAlgoEqualWeights1 = computeWeightedAgeofTypicalSensor_1(tempselectedSensorsMyAlgoEqualWeights1, numTotalCoveredPixels_MyAlgoEqualWeights, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, pixelLength, pixelWidth, k[kk])                    
+                    coverageTypicalSensor_MyAlgoEqualWeights1, numTotalCoveredPixels_MyAlgoEqualWeights1 = computeCoveredAreaofTypicalSensor(tempselectedSensorsMyAlgoEqualWeights1, num_anchorPoints, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
+                    weightedAgeTypicalSensor_MyAlgoEqualWeights1 = computeWeightedAgeofTypicalSensor_1(tempselectedSensorsMyAlgoEqualWeights1, numTotalCoveredPixels_MyAlgoEqualWeights1, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, pixelLength, pixelWidth, k[kk])                    
+                    weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights = computeWeightedAgeofTypicalSensor_AgeMin_1(tempselectedSensorsMyAlgoEqualWeights1, numTotalCoveredPixels_MyAlgoEqualWeights1, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, tempRatesofselectedSensorsMyAlgoEqualWeights, pixelLength, pixelWidth, k[kk])
+
                     
                     # a - No age minimization
-                    coverageTypicalSensor_1, numTotalCoveredPixels_TypicalSensor1 = computeCoveredAreaofTypicalSensor(tempselectedSensorsSensSelec_1, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
+                    coverageTypicalSensor_1, numTotalCoveredPixels_TypicalSensor1 = computeCoveredAreaofTypicalSensor(tempselectedSensorsSensSelec_1, num_anchorPoints, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
                     weightedAgeTypicalSensor_1 = computeWeightedAgeofTypicalSensor_1(tempselectedSensorsSensSelec_1, numTotalCoveredPixels_TypicalSensor1, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, pixelLength, pixelWidth, k[kk])
                  
+                    # temp - test new objective and compare the result to the one in step a - 
+                    coverageTypicalSensor_1_newAgeObjective, numTotalCoveredPixels_TypicalSensor1_newAgeObjective = computeCoveredAreaofTypicalSensor(tempselectedSensorsSensSelec_1_newAgeObjective, num_anchorPoints, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
+                    weightedAgeTypicalSensor_1_newAgeObjective = computeWeightedAgeofTypicalSensor_1(tempselectedSensorsSensSelec_1_newAgeObjective, numTotalCoveredPixels_TypicalSensor1_newAgeObjective, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, pixelLength, pixelWidth, k[kk])
+                    
+                    # new normalized objective function
+                    coverageTypicalSensor_1_newNormalizedObjective, numTotalCoveredPixels_TypicalSensor1_newNormalizedObjective = computeCoveredAreaofTypicalSensor(tempselectedSensorsSensSelec_1_newNormalizedObjective, num_anchorPoints, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
+                    weightedAgeTypicalSensor_1_newNormalizedObjective = computeWeightedAgeofTypicalSensor_1(tempselectedSensorsSensSelec_1_newNormalizedObjective, numTotalCoveredPixels_TypicalSensor1_newNormalizedObjective, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, pixelLength, pixelWidth, k[kk])
+                    
                     # b - With age minimization
-                    weightedAgeTypicalSensorAgeMin_1 = computeWeightedAgeofTypicalSensor_AgeMin_1(tempselectedSensorsSensSelec_1, coverageTypicalSensor_1, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, tempRatesofselectedSensorsAgeMin_1, pixelLength, pixelWidth, k[kk])
+                    weightedAgeTypicalSensorAgeMin_1 = computeWeightedAgeofTypicalSensor_AgeMin_1(tempselectedSensorsSensSelec_1_newAgeObjective, numTotalCoveredPixels_TypicalSensor1_newAgeObjective, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, tempRatesofselectedSensorsAgeMin_1, pixelLength, pixelWidth, k[kk])
                  
                     # Technique 2: All box
-                    coverageTypicalSensor_2, numTotalCoveredPixels_TypicalSensor2 = computeCoveredAreaofTypicalSensor(tempselectedSensorsSensSelec_2, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
+                    coverageTypicalSensor_2, numTotalCoveredPixels_TypicalSensor2 = computeCoveredAreaofTypicalSensor(tempselectedSensorsSensSelec_2, num_anchorPoints, sensorRadius, coordSensors, coordPixels, obstructedCoveredAnchorPoint, obstructedCoveredAnchorPoint, labeledMatrixPixel,pixelLength, pixelWidth)
                     weightedAgeTypicalSensor_2 = computeWeightedAgeofTypicalSensor_1(tempselectedSensorsSensSelec_2, numTotalCoveredPixels_TypicalSensor2, sensorRadius, coordSensors, coordPixels, labeledPixels, labeledMatrixPixel, obstructedCoveredAnchorPoint, weightedMap_1, weightedRegionsPerSensor_1, lam, d, N[ii], capacity, mu, pixelLength, pixelWidth, k[kk])
                  
                     
                     #temp3coverageObstrucedPixels_1.append(coverageObstrucedPixels_1)
                     #temp3coverageObstrucedPixels_2.append(coverageObstrucedPixels_2)
-                    #temp3noCollabCoverage.append(noCollabCoverage)
+                    temp3noCollabCoverage.append(noCollabCoverage)
 
                     temp3coverageTypicalSensor_Baseline.append(coverageTypicalSensor_Baseline)
                     temp3weightedAgeTypicalSensor_Baseline.append(weightedAgeTypicalSensor_Baseline)
 
-                    temp3coverageTypicalSensor_MyAlgoEqualWeights.append(coverageTypicalSensor_MyAlgoEqualWeights)
-                    temp3weightedAgeTypicalSensor_MyAlgoEqualWeights.append(weightedAgeTypicalSensor_MyAlgoEqualWeights) 
-                    temp3weightedAgeTypicalSensorAgeMin_MyAlgoEqualWeights.append(weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights)
-
+#                    temp3coverageTypicalSensor_MyAlgoEqualWeights.append(coverageTypicalSensor_MyAlgoEqualWeights)
+#                    temp3weightedAgeTypicalSensor_MyAlgoEqualWeights.append(weightedAgeTypicalSensor_MyAlgoEqualWeights) 
+     
                     temp3coverageTypicalSensor_MyAlgoEqualWeights1.append(coverageTypicalSensor_MyAlgoEqualWeights1)
                     temp3weightedAgeTypicalSensor_MyAlgoEqualWeights1.append(weightedAgeTypicalSensor_MyAlgoEqualWeights1) 
-
-                    
+                    temp3weightedAgeTypicalSensorAgeMin_MyAlgoEqualWeights.append(weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights)
+     
+               
                     temp3coverageTypicalSensor_1.append(coverageTypicalSensor_1)
                     temp3weightedAgeTypicalSensor_1.append(weightedAgeTypicalSensor_1) 
                     temp3weightedAgeTypicalSensorAgeMin_1.append(weightedAgeTypicalSensorAgeMin_1)
+
+                    temp3coverageTypicalSensor_1_newAgeObjective.append(coverageTypicalSensor_1_newAgeObjective)
+                    temp3weightedAgeTypicalSensor_1_newAgeObjective.append(weightedAgeTypicalSensor_1_newAgeObjective) 
+                    
+                    temp3coverageTypicalSensor_1_newNormalizedObjective.append(coverageTypicalSensor_1_newNormalizedObjective)
+                    temp3weightedAgeTypicalSensor_1_newNormalizedObjective.append(weightedAgeTypicalSensor_1_newNormalizedObjective)                     
                     
                     temp3coverageTypicalSensor_2.append(coverageTypicalSensor_2)
                     temp3weightedAgeTypicalSensor_2.append(weightedAgeTypicalSensor_2)                
                 
                  #coverageObstrucedPixels_1 = np.sum(temp3coverageObstrucedPixels_1)/num
                  #coverageObstrucedPixels_2 = np.sum(temp3coverageObstrucedPixels_2)/num
-                 #noCollabCoverage = np.sum(temp3noCollabCoverage)/num
+                 noCollabCoverage = np.sum(temp3noCollabCoverage)/num
                  #noCollabWeightedAge = np.sum(temp3noCollabWeightedAge)/num
                  
                  coverageTypicalSensor_Baseline = np.sum(temp3coverageTypicalSensor_Baseline)/num
                  weightedAgeTypicalSensor_Baseline = np.sum(temp3weightedAgeTypicalSensor_Baseline)/num
 
-                 coverageTypicalSensor_MyAlgoEqualWeights = np.sum(temp3coverageTypicalSensor_MyAlgoEqualWeights)/num
-                 weightedAgeTypicalSensor_MyAlgoEqualWeights  = np.sum(temp3weightedAgeTypicalSensor_MyAlgoEqualWeights)/num
-                 weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights = np.sum(temp3weightedAgeTypicalSensorAgeMin_MyAlgoEqualWeights)/num                 
+#                 coverageTypicalSensor_MyAlgoEqualWeights = np.sum(temp3coverageTypicalSensor_MyAlgoEqualWeights)/num
+#                 weightedAgeTypicalSensor_MyAlgoEqualWeights  = np.sum(temp3weightedAgeTypicalSensor_MyAlgoEqualWeights)/num
+#                 weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights = np.sum(temp3weightedAgeTypicalSensorAgeMin_MyAlgoEqualWeights)/num                 
+                 
                  
                  coverageTypicalSensor_MyAlgoEqualWeights1 = np.sum(temp3coverageTypicalSensor_MyAlgoEqualWeights1)/num
                  weightedAgeTypicalSensor_MyAlgoEqualWeights1  = np.sum(temp3weightedAgeTypicalSensor_MyAlgoEqualWeights1)/num
+                 weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights = np.sum(temp3weightedAgeTypicalSensorAgeMin_MyAlgoEqualWeights)/num                 
+
 
                  coverageTypicalSensor_1 = np.sum(temp3coverageTypicalSensor_1)/num
                  weightedAgeTypicalSensor_1  = np.sum(temp3weightedAgeTypicalSensor_1)/num
                  weightedAgeTypicalSensorAgeMin_1 = np.sum(temp3weightedAgeTypicalSensorAgeMin_1)/num
+
+                 coverageTypicalSensor_1_newAgeObjective = np.sum(temp3coverageTypicalSensor_1_newAgeObjective)/num
+                 weightedAgeTypicalSensor_1_newAgeObjective  = np.sum(temp3weightedAgeTypicalSensor_1_newAgeObjective)/num
+                 
+                 coverageTypicalSensor_1_newNormalizedObjective = np.sum(temp3coverageTypicalSensor_1_newNormalizedObjective)/num
+                 weightedAgeTypicalSensor_1_newNormalizedObjective = np.sum(temp3weightedAgeTypicalSensor_1_newNormalizedObjective)/num                 
                  
                  coverageTypicalSensor_2 = np.sum(temp3coverageTypicalSensor_2)/num
                  weightedAgeTypicalSensor_2 = np.sum(temp3weightedAgeTypicalSensor_2)/num
@@ -2590,21 +3017,27 @@ def main(T=int(1e2)):
                  temp1WeightedAgeBaseline.append(weightedAgeTypicalSensor_Baseline)
                  
                  # Naive Approach: No collaboration
-                 #temp1NoCollabCoverage.append(noCollabCoverage)
+                 temp1NoCollabCoverage.append(noCollabCoverage)
                  #temp1NoCollabWeightedAge.append(noCollabWeightedAge)
                  
                  # My algo: Increase coverage while minimizing age
-                 temp1coverageTypicalSensor_MyAlgoEqualWeights.append(coverageTypicalSensor_MyAlgoEqualWeights)
-                 temp1WeightedAge_MyAlgoEqualWeights.append(weightedAgeTypicalSensor_MyAlgoEqualWeights)                 
-                 temp1WeightedAge_MyAlgoEqualWeights_MinAge.append(weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights)                                  
+#                 temp1coverageTypicalSensor_MyAlgoEqualWeights.append(coverageTypicalSensor_MyAlgoEqualWeights)
+#                 temp1WeightedAge_MyAlgoEqualWeights.append(weightedAgeTypicalSensor_MyAlgoEqualWeights)                 
 
                  temp1coverageTypicalSensor_MyAlgoEqualWeights1.append(coverageTypicalSensor_MyAlgoEqualWeights1)
                  temp1WeightedAge_MyAlgoEqualWeights1.append(weightedAgeTypicalSensor_MyAlgoEqualWeights1)  
-                 
+                 temp1WeightedAge_MyAlgoEqualWeights_MinAge.append(weightedAgeTypicalSensor_AgeMin_MyAlgoEqualWeights)                                  
+
                  # Technique 1: Region of Interest
                  temp1coverageTypicalSensorSensSelec_1.append(coverageTypicalSensor_1)
                  temp1WeightedAgeSensSelec_1.append(weightedAgeTypicalSensor_1)                 
                  temp1WeightedAgeMinAge_1.append(weightedAgeTypicalSensorAgeMin_1)
+
+                 temp1coverageTypicalSensorSensSelec_1_newAgeObjective.append(coverageTypicalSensor_1_newAgeObjective)
+                 temp1WeightedAgeSensSelec_1_newAgeObjective.append(weightedAgeTypicalSensor_1_newAgeObjective)    
+                 
+                 temp1coverageTypicalSensorSensSelec_1_newNormalizedObjective.append(coverageTypicalSensor_1_newNormalizedObjective)
+                 temp1WeightedAgeSensSelec_1_newNormalizedObjective.append(weightedAgeTypicalSensor_1_newNormalizedObjective)                  
                  
                  #temp1WeightedAgeSensSelec.append(tempWeightedAgeSensSelec)
                  #temp1selectedSensorsSensSelec.append(len(tempselectedSensorsSensSelec))
@@ -2620,22 +3053,28 @@ def main(T=int(1e2)):
              temp2coverageAreaBaseline[jj].append(temp1coverageAreaBaseline)
              temp2WeightedAgeBaseline[jj].append(temp1WeightedAgeBaseline)
              
-             #temp2NoCollabCoverage[jj].append(temp1NoCollabCoverage)
+             temp2NoCollabCoverage[jj].append(temp1NoCollabCoverage)
              #temp2NoCollabWeightedAge[jj].append(temp1NoCollabWeightedAge)
              
-             temp2coverageTypicalSensor_MyAlgoEqualWeights[jj].append(temp1coverageTypicalSensor_MyAlgoEqualWeights)
-             temp2WeightedAge_MyAlgoEqualWeights[jj].append(temp1WeightedAge_MyAlgoEqualWeights)             
-             temp2WeightedAge_MyAlgoEqualWeights_MinAge[jj].append(temp1WeightedAge_MyAlgoEqualWeights_MinAge)
-
+#             temp2coverageTypicalSensor_MyAlgoEqualWeights[jj].append(temp1coverageTypicalSensor_MyAlgoEqualWeights)
+#             temp2WeightedAge_MyAlgoEqualWeights[jj].append(temp1WeightedAge_MyAlgoEqualWeights)             
 
              temp2coverageTypicalSensor_MyAlgoEqualWeights1[jj].append(temp1coverageTypicalSensor_MyAlgoEqualWeights1)
              temp2WeightedAge_MyAlgoEqualWeights1[jj].append(temp1WeightedAge_MyAlgoEqualWeights1)             
+             temp2WeightedAge_MyAlgoEqualWeights_MinAge[jj].append(temp1WeightedAge_MyAlgoEqualWeights_MinAge)
+
              
              #temp2coverageObstructedPixelsSensSelec_1[jj].append(temp1coverageObstructedPixelsSensSelec_1)
              temp2coverageTypicalSensorSensSelec_1[jj].append(temp1coverageTypicalSensorSensSelec_1)
              temp2WeightedAgeSensSelec_1[jj].append(temp1WeightedAgeSensSelec_1)             
              temp2WeightedAgeMinAge_1[jj].append(temp1WeightedAgeMinAge_1)
-             
+
+             temp2coverageTypicalSensorSensSelec_1_newAgeObjective[jj].append(temp1coverageTypicalSensorSensSelec_1_newAgeObjective)
+             temp2WeightedAgeSensSelec_1_newAgeObjective[jj].append(temp1WeightedAgeSensSelec_1_newAgeObjective) 
+
+             temp2coverageTypicalSensorSensSelec_1_newNormalizedObjective[jj].append(temp1coverageTypicalSensorSensSelec_1_newNormalizedObjective)
+             temp2WeightedAgeSensSelec_1_newNormalizedObjective[jj].append(temp1WeightedAgeSensSelec_1_newNormalizedObjective) 
+
              #temp2coverageObstructedPixelsSensSelec_2[jj].append(temp1coverageObstructedPixelsSensSelec_2)
              temp2coverageTypicalSensorSensSelec_2[jj].append(temp1coverageTypicalSensorSensSelec_2)
              temp2WeightedAgeSensSelec_2[jj].append(temp1WeightedAgeSensSelec_2)
@@ -2650,63 +3089,64 @@ def main(T=int(1e2)):
          #stdcoverageAreaObstructions_2[ii].append(np.std(temp2coverageAreaObstructions_2,axis=0))
          ##
 
-            
+         
+         #####################
          coverageAreaBaseline[ii].append(np.sum(temp2coverageAreaBaseline,axis=0)/numIter)
          weightedAgeBaseline[ii].append(np.sum(temp2WeightedAgeBaseline,axis=0)/numIter*1000.)
-
          ##
          stdcoverageAreaBaseline[ii].append(np.std(temp2coverageAreaBaseline,axis=0))
          stdweightedAgeBaseline[ii].append(np.std(temp2WeightedAgeBaseline,axis=0)*1000.)
-         ##
+         ####################
          
-         #noCollabCoverageTypicalSensor[ii].append(np.sum(temp2NoCollabCoverage,axis=0)/numIter)
-         noCollabWeightedAgeTypicalSensor[ii].append(np.sum(temp2NoCollabWeightedAge,axis=0)/numIter*1000.)
-
+         ####################
+         noCollabCoverageTypicalSensor[ii].append(np.sum(temp2NoCollabCoverage,axis=0)/numIter)
          ##
-         #stdnoCollabCoverageTypicalSensor[ii].append(np.std(temp2NoCollabCoverage,axis=0))
-         stdnoCollabWeightedAgeTypicalSensor[ii].append(np.std(temp2NoCollabWeightedAge,axis=0)*1000.)         
-         ##
+         stdnoCollabCoverageTypicalSensor[ii].append(np.std(temp2NoCollabCoverage,axis=0))       
+         ####################
 
-         coverage_MyAlgoEqualWeights[ii].append(np.sum(temp2coverageTypicalSensor_MyAlgoEqualWeights,axis=0)/numIter)
-         weightedAge_MyAlgoEqualWeights[ii].append(np.sum(temp2WeightedAge_MyAlgoEqualWeights,axis=0)/numIter*1000.)
-         weightedAge_MyAlgoEqualWeights_MinAge[ii].append(np.sum(temp2WeightedAge_MyAlgoEqualWeights_MinAge,axis=0)/numIter*1000.)
-
+#         coverage_MyAlgoEqualWeights[ii].append(np.sum(temp2coverageTypicalSensor_MyAlgoEqualWeights,axis=0)/numIter)
+#         weightedAge_MyAlgoEqualWeights[ii].append(np.sum(temp2WeightedAge_MyAlgoEqualWeights,axis=0)/numIter*1000.)
+         
+         ###################
          coverage_MyAlgoEqualWeights1[ii].append(np.sum(temp2coverageTypicalSensor_MyAlgoEqualWeights1,axis=0)/numIter)
          weightedAge_MyAlgoEqualWeights1[ii].append(np.sum(temp2WeightedAge_MyAlgoEqualWeights1,axis=0)/numIter*1000.)
+         weightedAge_MyAlgoEqualWeights_MinAge[ii].append(np.sum(temp2WeightedAge_MyAlgoEqualWeights_MinAge,axis=0)/numIter*1000.)
+         ##
+         stdcoverage_MyAlgoEqualWeights1[ii].append(np.std(temp2coverageTypicalSensor_MyAlgoEqualWeights1,axis=0))
+         stdweightedAge_MyAlgoEqualWeights1[ii].append(np.std(temp2WeightedAge_MyAlgoEqualWeights1,axis=0)*1000.)
+         stdweightedAge_MyAlgoEqualWeights_MinAge[ii].append(np.std(temp2WeightedAge_MyAlgoEqualWeights_MinAge,axis=0)*1000.)
          
+         
+         ############
          #coverageObstructedPixelsSensSelec_1[ii].append(np.sum(temp2coverageObstructedPixelsSensSelec_1,axis=0)/numIter)
          coverageTypicalSensorSensSelec_1[ii].append(np.sum(temp2coverageTypicalSensorSensSelec_1,axis=0)/numIter)
          weightedAgeSensSelec_1[ii].append(np.sum(temp2WeightedAgeSensSelec_1,axis=0)/numIter*1000.)
-         weightedAgeMinAge_1[ii].append(np.sum(temp2WeightedAgeMinAge_1,axis=0)/numIter*1000.)
-
-
-         ##
-         #stdcoverageObstructedPixelsSensSelec_1[ii].append(np.std(temp2coverageObstructedPixelsSensSelec_1,axis=0))
-         #stdcoverageTypicalSensorSensSelec_1[ii].append(np.std(temp2coverageTypicalSensorSensSelec_1,axis=0))
-         stdweightedAgeSensSelec_1[ii].append(np.std(temp2WeightedAgeSensSelec_1,axis=0)*1000.)
-         #weightedAgeSensSelec.append(np.sum(temp1WeightedAgeSensSelec)/numIter*1000.)
-         #selectedSensorsSensSelec.append(np.sum(temp1selectedSensorsSensSelec)/numIter)
+         weightedAgeMinAge_1[ii].append(np.sum(temp2WeightedAgeMinAge_1,axis=0)/numIter*1000.)    
+         ############
          
+         #################
+         coverageTypicalSensorSensSelec_1_newAgeObjective[ii].append(np.sum(temp2coverageTypicalSensorSensSelec_1_newAgeObjective,axis=0)/numIter)
+         weightedAgeSensSelec_1_newAgeObjective[ii].append(np.sum(temp2WeightedAgeSensSelec_1_newAgeObjective,axis=0)/numIter*1000.)
+           
+         coverageTypicalSensorSensSelec_1_newNormalizedObjective[ii].append(np.sum(temp2coverageTypicalSensorSensSelec_1_newNormalizedObjective,axis=0)/numIter)
+         weightedAgeSensSelec_1_newNormalizedObjective[ii].append(np.sum(temp2WeightedAgeSensSelec_1_newNormalizedObjective,axis=0)/numIter*1000.)         
+         
+         
+         
+         ##
+         stdcoverageTypicalSensorSensSelec_1[ii].append(np.std(temp2coverageTypicalSensorSensSelec_1_newAgeObjective,axis=0))
+         stdweightedAgeSensSelec_1[ii].append(np.std(temp2WeightedAgeSensSelec_1_newAgeObjective,axis=0)*1000.)
          stdweightedAgeMinAge_1[ii].append(np.std(temp2WeightedAgeMinAge_1,axis=0)*1000.)
-         ##
+         #################
 
          
-         #coverageObstructedPixelsSensSelec_2[ii].append(np.sum(temp2coverageObstructedPixelsSensSelec_2,axis=0)/numIter)
+         #################
          coverageTypicalSensorSensSelec_2[ii].append(np.sum(temp2coverageTypicalSensorSensSelec_2,axis=0)/numIter)
          weightedAgeSensSelec_2[ii].append(np.sum(temp2WeightedAgeSensSelec_2,axis=0)/numIter*1000.)
-#         coverageSensSelec1.append(np.sum(temp1coverageSensSelec1)/numIter)
-#         weightedAgeSensSelec1.append(np.sum(temp1WeightedAgeSensSelec1)/numIter*1000.)
-#         selectedSensorsSensSelec1.append(np.sum(temp1selectedSensorsSensSelec1)/numIter)         
-     
-#         coverageAreaAgeMin.append(np.sum(temp1coverageAreaAgeMin)/numIter)
-#         areaWeightedAgeAgeMin.append(np.sum(temp1areaWeightedAgeAgeMin)/numIter*1000.)
-#         selectedSensorsAgeMin.append(np.sum(temp1selectedSensorsAgeMin)/numIter)        
-    
-          ##
-         #stdcoverageObstructedPixelsSensSelec_2[ii].append(np.std(temp2coverageObstructedPixelsSensSelec_2,axis=0))
-         #stdcoverageTypicalSensorSensSelec_2[ii].append(np.std(temp2coverageTypicalSensorSensSelec_2,axis=0))
+         ##
+         stdcoverageTypicalSensorSensSelec_2[ii].append(np.std(temp2coverageTypicalSensorSensSelec_2,axis=0))
          stdweightedAgeSensSelec_2[ii].append(np.std(temp2WeightedAgeSensSelec_2,axis=0)*1000.)          
-          ##    
+         #################    
           ##
     
     
@@ -2735,25 +3175,47 @@ def main(T=int(1e2)):
 #    plt.savefig(os.path.join(path,'Age Typical Sensor - k' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' + '_obstructions_' + '.eps'),dpi=300, transparent=True)
 #    plt.savefig(os.path.join(path,'Age Typical Sensor - k' + '_N=' + str(min(N)) +'_'+ str(max(N)) + '_' + 'lam=' + 'lam_min' + '_obstructions_' + '.pdf'),dpi=300, transparent=True)
 
+    ##########   Coverage  ########
+    ###################################
     sio.savemat('coverageAreaBaseline-k.mat', {'coverageAreaBaseline':coverageAreaBaseline})
-    sio.savemat('coverage_MyAlgoEqualWeights-k.mat', {'coverage_MyAlgoEqualWeights':coverage_MyAlgoEqualWeights})
+    sio.savemat('noCollabCoverageTypicalSensor-k.mat', {'noCollabCoverageTypicalSensor':noCollabCoverageTypicalSensor})
+    #sio.savemat('coverage_MyAlgoEqualWeights-k.mat', {'coverage_MyAlgoEqualWeights':coverage_MyAlgoEqualWeights})
     sio.savemat('coverage_MyAlgoEqualWeights1-k.mat', {'coverage_MyAlgoEqualWeights1':coverage_MyAlgoEqualWeights1})
     sio.savemat('coverageTypicalSensorSensSelec_1-k.mat', {'coverageTypicalSensorSensSelec_1':coverageTypicalSensorSensSelec_1})
+    sio.savemat('coverageTypicalSensorSensSelec_1_newAgeObjective-k.mat', {'coverageTypicalSensorSensSelec_1_newAgeObjective':coverageTypicalSensorSensSelec_1_newAgeObjective})
+    sio.savemat('coverageTypicalSensorSensSelec_1_newNormalizedObjective-k.mat', {'coverageTypicalSensorSensSelec_1_newNormalizedObjective':coverageTypicalSensorSensSelec_1_newNormalizedObjective})    
     sio.savemat('coverageTypicalSensorSensSelec_2-k.mat', {'coverageTypicalSensorSensSelec_2':coverageTypicalSensorSensSelec_2})
+    ###########
+    ####   STD Coverage  ####
+    ###########
+    sio.savemat('stdcoverageAreaBaseline-k.mat', {'stdcoverageAreaBaseline':stdcoverageAreaBaseline})
+    sio.savemat('stdnoCollabWeightedAgeTypicalSensor-k.mat', {'stdnoCollabWeightedAgeTypicalSensor':stdnoCollabWeightedAgeTypicalSensor})
+    #sio.savemat('coverage_MyAlgoEqualWeights-k.mat', {'coverage_MyAlgoEqualWeights':coverage_MyAlgoEqualWeights})
+    sio.savemat('stdcoverage_MyAlgoEqualWeights1-k.mat', {'stdcoverage_MyAlgoEqualWeights1':stdcoverage_MyAlgoEqualWeights1})
+    sio.savemat('stdcoverageTypicalSensorSensSelec_1-k.mat', {'stdcoverageTypicalSensorSensSelec_1':stdcoverageTypicalSensorSensSelec_1})
+    sio.savemat('stdcoverageTypicalSensorSensSelec_2-k.mat', {'stdcoverageTypicalSensorSensSelec_2':stdcoverageTypicalSensorSensSelec_2})
+    ##################################    
     
+    #########  Age  #########
     sio.savemat('weightedAgeBaseline-k.mat', {'weightedAgeBaseline':weightedAgeBaseline})
-    sio.savemat('weightedAge_MyAlgoEqualWeights-k.mat', {'weightedAge_MyAlgoEqualWeights':weightedAge_MyAlgoEqualWeights})
+    #sio.savemat('weightedAge_MyAlgoEqualWeights-k.mat', {'weightedAge_MyAlgoEqualWeights':weightedAge_MyAlgoEqualWeights})
     sio.savemat('weightedAge_MyAlgoEqualWeights_MinAge-k.mat', {'weightedAge_MyAlgoEqualWeights_MinAge':weightedAge_MyAlgoEqualWeights_MinAge})    
     sio.savemat('weightedAge_MyAlgoEqualWeights1-k.mat', {'weightedAge_MyAlgoEqualWeights1':weightedAge_MyAlgoEqualWeights1})
     sio.savemat('weightedAgeSensSelec_1-k.mat', {'weightedAgeSensSelec_1':weightedAgeSensSelec_1})
+    sio.savemat('weightedAgeSensSelec_1_newAgeObjective-k.mat', {'weightedAgeSensSelec_1_newAgeObjective':weightedAgeSensSelec_1_newAgeObjective})
+    sio.savemat('weightedAgeSensSelec_1_newNormalizedObjective-k.mat', {'weightedAgeSensSelec_1_newNormalizedObjective':weightedAgeSensSelec_1_newNormalizedObjective})
     sio.savemat('weightedAgeMinAge_1-k.mat', {'weightedAgeMinAge_1':weightedAgeMinAge_1})
     sio.savemat('weightedAgeSensSelec_2-k.mat', {'weightedAgeSensSelec_2':weightedAgeSensSelec_2})
-
-#    sio.savemat('stdweightedAgeBaseline-k.mat', {'stdweightedAgeBaseline':stdweightedAgeBaseline})
-#    sio.savemat('stdweightedAgeSensSelec_1-k.mat', {'stdweightedAgeSensSelec_1':stdweightedAgeSensSelec_1})
-#    sio.savemat('stdweightedAgeMinAge_1-k.mat', {'stdweightedAgeMinAge_1':stdweightedAgeMinAge_1})
-#    sio.savemat('stdweightedAgeSensSelec_2-k.mat', {'stdweightedAgeSensSelec_2':stdweightedAgeSensSelec_2})
-    
+    ###################
+    ####  STD Age  ####
+    ###################q
+    sio.savemat('stdweightedAgeBaseline-k.mat', {'stdweightedAgeBaseline':stdweightedAgeBaseline})
+    sio.savemat('stdweightedAge_MyAlgoEqualWeights1-k.mat', {'stdweightedAge_MyAlgoEqualWeights1':stdweightedAge_MyAlgoEqualWeights1})
+    sio.savemat('stdweightedAge_MyAlgoEqualWeights_MinAge-k.mat', {'stdweightedAge_MyAlgoEqualWeights_MinAge':stdweightedAge_MyAlgoEqualWeights_MinAge})
+    sio.savemat('stdweightedAgeSensSelec_1-k.mat', {'stdweightedAgeSensSelec_1':stdweightedAgeSensSelec_1})
+    sio.savemat('stdweightedAgeMinAge_1-k.mat', {'stdweightedAgeMinAge_1':stdweightedAgeMinAge_1})
+    sio.savemat('stdweightedAgeSensSelec_2-k.mat', {'stdweightedAgeSensSelec_2':stdweightedAgeSensSelec_2})
+    ####################
 
     ################################################################################
      
